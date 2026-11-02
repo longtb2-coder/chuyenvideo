@@ -20,12 +20,12 @@ This branch contains an Android source foundation and the first functional video
 
 ## Video intake — known limits
 - Social-platform page URLs (TikTok, Facebook, Shopee, Douyin) are not universal direct video files. Login walls, anti-bot controls, expiring signatures and platform policies can prevent direct retrieval. The app reports non-video responses and provides the local-file fallback; it does not pretend every page URL can be downloaded.
-- Imported files are visible in the phone's Files/Gallery under Movies/LONGKAKA SELLER AI. The app's persistent project index in Room, rename/delete controls, duplicate detection and restart recovery are still pending.
+- Imported files are visible in the phone's Files/Gallery under Movies/LONGKAKA SELLER AI. The local SQLite video-library index now stores metadata and content URIs, and the dashboard reloads the list after app restart. Rename, safe file deletion, duplicate warnings, thumbnails and missing-file reconciliation remain pending.
 - Large files are accepted when sufficient free storage exists; import reserves a safety margin of free space.
 - The imported file remains in app storage until a future project/file-management screen provides explicit deletion controls.
 
-## Not implemented yet
-- Room database and persistent project/job library.
+## Video library — implemented in source\n- SQLite stores metadata only; video bytes remain in shared phone storage.\n- Dashboard reloads saved entries on launch and lets the user select a previously imported video.\n- Removing a library entry is deliberately separate from deleting the actual media file. No delete-file action is exposed yet.\n- `contentUri` is explicitly a MediaStore `content://` URI, not a filesystem path; future media processing must consume it as a URI or copy it to a controlled working file.\n\n## Not implemented yet
+- Persistent local SQLite video library for imported-video metadata is implemented; full project/job persistence and migration tests remain pending.
 - Foreground long-running worker, notification, cancellation and retry/recovery.
 - Media probing beyond basic metadata, thumbnails and codec compatibility warnings.
 - OCR, ASR, translation, text cleanup/inpainting, Vietnamese TTS, subtitle editor and video renderer/export.
