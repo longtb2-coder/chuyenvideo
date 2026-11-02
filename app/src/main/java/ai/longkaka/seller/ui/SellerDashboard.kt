@@ -3,6 +3,7 @@ package ai.longkaka.seller.ui
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ai.longkaka.seller.media.ImportedVideo
@@ -40,6 +42,10 @@ import ai.longkaka.seller.media.VideoImportRepository
 import ai.longkaka.seller.media.VideoLibraryRepository
 import ai.longkaka.seller.translation.ChineseOverlayTranslator
 import ai.longkaka.seller.translation.OnScreenText
+import ai.longkaka.seller.processing.TextRegionInpainting
+import ai.longkaka.seller.processing.VideoFrameRepairPreview
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -55,6 +61,9 @@ fun SellerDashboard() {
     var scanStatus by remember { mutableStateOf("Chưa quét chữ trên hình.") }
     var scanProgress by remember { mutableIntStateOf(0) }
     var isScanning by remember { mutableStateOf(false) }
+    var repairPreview by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var repairStatus by remember { mutableStateOf("Chưa tạo bản xem trước phục hồi.") }
+    var isRepairing by remember { mutableStateOf(false) }
     var videoLibrary by remember { mutableStateOf<List<ImportedVideo>>(emptyList()) }
     var sourceUrl by remember { mutableStateOf("") }
     var importedVideo by remember { mutableStateOf<ImportedVideo?>(null) }
@@ -259,7 +268,41 @@ fun SellerDashboard() {
                         }
                     }
                 }
-                ToolRow(Icons.Rounded.AutoAwesome, "Làm sạch chữ trên video", "Bước phục hồi nền và chèn chữ Việt đang được tích hợp")
+                if (translatedOverlays.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = {
+                            val video = importedVideo
+                            val first = translatedOverlays.first()
+                            if (video != null && !isRepairing) {
+                                scope.launch {
+                                    isRepairing = true
+                                    repairStatus = "Đang phục hồi thử một khung hình trên điện thoại…"
+                                    try {
+                                        val region = TextRegionInpainting.Region(first.left, first.top, first.right, first.bottom)
+                                        val bitmap = withContext(Dispatchers.Default) {
+                                            VideoFrameRepairPreview.create(context, Uri.parse(video.contentUri), first.timeMs, listOf(region))
+                                        }
+                                        repairPreview?.recycle()
+                                        repairPreview = bitmap
+                                        repairStatus = "Đã tạo ảnh xem trước phục hồi cục bộ. Kiểm tra kỹ trước khi áp dụng cho video."
+                                    } catch (error: Throwable) {
+                                        repairStatus = error.message ?: "Không thể phục hồi khung hình này."
+                                    } finally {
+                                        isRepairing = false
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isRepairing && importedVideo != null,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (isRepairing) "ĐANG PHỤC HỒI KHUNG HÌNH…" else "THỬ XÓA CHỮ TRÊN 1 KHUNG HÌNH") }
+                    Text(repairStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    repairPreview?.let { bitmap ->
+                        Image(bitmap.asImageBitmap(), contentDescription = "Khung hình sau phục hồi chữ",
+                            modifier = Modifier.fillMaxWidth().height(220.dp))
+                    }
+                }
+                ToolRow(Icons.Rounded.AutoAwesome, "Làm sạch chữ trên video", "Đã có phục hồi thử một khung hình bằng OpenCV; xử lý video liên tục và AI nâng cao đang phát triển")
                 ToolRow(Icons.Rounded.Subtitles, "Tạo phụ đề tiếng Việt", "Căn thời gian và cho phép chỉnh sửa")
                 ToolRow(Icons.Rounded.CloudDownload, "Thay giọng đọc tiếng Việt", "Chọn giọng và nghe thử trước khi ghép")
             }
