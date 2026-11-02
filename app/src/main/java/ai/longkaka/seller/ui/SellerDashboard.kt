@@ -64,7 +64,7 @@ fun SellerDashboard() {
             scope.launch {
                 isImporting = true
                 importProgress = 0
-                importStatus = "Đang sao chép video vào thư viện riêng của ứng dụng…"
+                importStatus = "Đang lưu video trực tiếp vào thư mục Movies/LONGKAKA SELLER AI trên điện thoại…"
                 try {
                     val result = importer.importFromUri(uri) { importProgress = it }
                     importedVideo = result
@@ -100,7 +100,7 @@ fun SellerDashboard() {
                 OutlinedTextField(
                     value = sourceUrl, onValueChange = { sourceUrl = it },
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text("Dán link video trực tiếp (HTTPS)") },
+                    label = { Text("Dán link tải video trực tiếp (HTTPS)") },
                     placeholder = { Text("Link tệp MP4 / MOV / WEBM…") },
                     enabled = !isImporting
                 )
@@ -124,14 +124,14 @@ fun SellerDashboard() {
                     },
                     enabled = sourceUrl.isNotBlank() && !isImporting,
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("NHẬN VIDEO TỪ LINK") }
+                ) { Text("TẢI VIDEO VỀ ĐIỆN THOẠI") }
                 OutlinedButton(
                     onClick = { picker.launch(arrayOf("video/*")) },
                     enabled = !isImporting,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     androidx.compose.material3.Icon(Icons.Rounded.UploadFile, contentDescription = null)
-                    Text("Chọn video trong điện thoại")
+                    Text("Chọn video từ điện thoại")
                 }
                 if (isImporting) LinearProgressIndicator(
                     progress = { importProgress / 100f }, modifier = Modifier.fillMaxWidth()
@@ -146,13 +146,13 @@ fun SellerDashboard() {
                                 style = MaterialTheme.typography.bodySmall)
                             Text("Dung lượng: ${formatBytes(video.sizeBytes)}",
                                 style = MaterialTheme.typography.bodySmall)
-                            Text("Đã lưu bản làm việc riêng trong ứng dụng",
+                            Text("Đã lưu tại Movies/LONGKAKA SELLER AI trong bộ nhớ điện thoại",
                                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
                 Text(
-                    "Link mạng xã hội có thể cần đăng nhập hoặc bị nền tảng giới hạn. Nếu link không phải tệp video trực tiếp, hãy tải video bằng chức năng hợp lệ của nền tảng rồi chọn tệp ở đây. Không xóa watermark hay dấu bản quyền.",
+                    "Video nhập từ máy hoặc tải từ link trực tiếp sẽ được lưu vào thư mục Movies/LONGKAKA SELLER AI để dễ tìm trong ứng dụng Tệp/Thư viện. Không giới hạn cứng dung lượng; việc tải phụ thuộc dung lượng trống thực tế của điện thoại. Link trang TikTok/Facebook/Shopee/Douyin thường không phải link tệp trực tiếp và có thể cần đăng nhập hoặc bị nền tảng giới hạn. Khi đó, hãy lưu video bằng chức năng hợp lệ của nền tảng rồi chọn tệp ở đây. Không xóa watermark hay dấu bản quyền.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
