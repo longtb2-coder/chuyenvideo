@@ -24,7 +24,13 @@ This branch contains an Android source foundation and the first functional video
 - Large files are accepted when sufficient free storage exists; import reserves a safety margin of free space.
 - The imported file remains in app storage until a future project/file-management screen provides explicit deletion controls.
 
-## Video library — implemented in source\n- SQLite stores metadata only; video bytes remain in shared phone storage.\n- Dashboard reloads saved entries on launch and lets the user select a previously imported video.\n- Removing a library entry is deliberately separate from deleting the actual media file. No delete-file action is exposed yet.\n- `contentUri` is explicitly a MediaStore `content://` URI, not a filesystem path; future media processing must consume it as a URI or copy it to a controlled working file.\n\n## Not implemented yet
+## Video library — implemented in source
+- SQLite stores metadata only; video bytes remain in shared phone storage.
+- Dashboard reloads saved entries on launch and lets the user select a previously imported video.
+- Removing a library entry is deliberately separate from deleting the actual media file. No delete-file action is exposed yet.
+- `contentUri` is explicitly a MediaStore `content://` URI, not a filesystem path; future media processing must consume it as a URI or copy it to a controlled working file.
+
+## Not implemented yet
 - Persistent local SQLite video library for imported-video metadata is implemented; full project/job persistence and migration tests remain pending.
 - Foreground long-running worker, notification, cancellation and retry/recovery.
 - Media probing beyond basic metadata, thumbnails and codec compatibility warnings.
