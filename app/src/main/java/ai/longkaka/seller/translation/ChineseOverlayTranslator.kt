@@ -20,6 +20,7 @@ data class OnScreenText(
     val sourceText: String,
     val vietnameseText: String,
     val timeMs: Long,
+    val lastTimeMs: Long,
     val left: Float,
     val top: Float,
     val right: Float,
@@ -68,18 +69,32 @@ class ChineseOverlayTranslator(private val context: Context) {
                         val text = block.text.trim()
                         if (text.any { it.code in 0x3400..0x9FFF || it.code in 0xF900..0xFAFF }) {
                             val key = text.replace(Regex("\\s+"), "")
-                            if (key !in unique) {
-                                val translated = translator.translate(text).awaitTask()
-                                val box = block.boundingBox
-                                if (box != null) {
+                            val box = block.boundingBox
+                            if (box != null) {
+                                val normalizedLeft = (box.left.toFloat() / bitmap.width).coerceIn(0f, 1f)
+                                val normalizedTop = (box.top.toFloat() / bitmap.height).coerceIn(0f, 1f)
+                                val normalizedRight = (box.right.toFloat() / bitmap.width).coerceIn(0f, 1f)
+                                val normalizedBottom = (box.bottom.toFloat() / bitmap.height).coerceIn(0f, 1f)
+                                val previous = unique[key]
+                                if (previous != null) {
+                                    unique[key] = previous.copy(
+                                        lastTimeMs = timeMs,
+                                        left = minOf(previous.left, normalizedLeft),
+                                        top = minOf(previous.top, normalizedTop),
+                                        right = maxOf(previous.right, normalizedRight),
+                                        bottom = maxOf(previous.bottom, normalizedBottom)
+                                    )
+                                } else {
+                                    val translated = translator.translate(text).awaitTask()
                                     unique[key] = OnScreenText(
                                         sourceText = text,
                                         vietnameseText = translated,
                                         timeMs = timeMs,
-                                        left = box.left.toFloat() / bitmap.width,
-                                        top = box.top.toFloat() / bitmap.height,
-                                        right = box.right.toFloat() / bitmap.width,
-                                        bottom = box.bottom.toFloat() / bitmap.height
+                                        lastTimeMs = timeMs,
+                                        left = normalizedLeft,
+                                        top = normalizedTop,
+                                        right = normalizedRight,
+                                        bottom = normalizedBottom
                                     )
                                 }
                             }
