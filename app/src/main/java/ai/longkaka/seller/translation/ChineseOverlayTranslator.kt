@@ -4,6 +4,12 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.graphics.Bitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URLEncoder
+import java.net.URL
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
@@ -144,7 +150,7 @@ class ChineseOverlayTranslator(private val context: Context) {
 
             return tracks.map { track ->
                 val translated = translateForProduct(track.displayText, category) { phrase ->
-                    translator.translate(phrase).awaitTask()
+                    translateOnline(phrase) ?: translator.translate(phrase).awaitTask()
                 }
                 OnScreenText(
                     sourceText = track.displayText,
@@ -165,6 +171,42 @@ class ChineseOverlayTranslator(private val context: Context) {
     }
 }
 
+
+
+/**
+ * Internet-first translation using MyMemory's public Chinese-to-Vietnamese endpoint.
+ * This endpoint has a limited free quota and can be unavailable; callers always fall
+ * back to the on-device ML Kit model. No API key or paid account is embedded in the app.
+ */
+private suspend fun translateOnline(source: String): String? = withContext(Dispatchers.IO) {
+    var connection: HttpURLConnection? = null
+    try {
+        val encoded = URLEncoder.encode(source, "UTF-8")
+        val url = URL("https://api.mymemory.translated.net/get?q=$encoded&langpair=zh-CN|vi")
+        connection = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 8_000
+            readTimeout = 12_000
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("User-Agent", "LongkakaSellerAI/1.0")
+        }
+        if (connection.responseCode !in 200..299) return@withContext null
+        val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        val root = JSONObject(body)
+        val responseStatus = root.optInt("responseStatus", 0)
+        val translated = root.optJSONObject("responseData")
+            ?.optString("translatedText")
+            ?.trim()
+            .orEmpty()
+        if (responseStatus == 200 && translated.isNotBlank() &&
+            !translated.equals(source, ignoreCase = true) &&
+            !translated.contains("MYMEMORY WARNING")) translated else null
+    } catch (_: Exception) {
+        null
+    } finally {
+        connection?.disconnect()
+    }
+}
 
 private suspend fun translateForProduct(
     source: String,
