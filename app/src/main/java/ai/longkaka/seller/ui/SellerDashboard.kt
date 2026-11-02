@@ -54,7 +54,17 @@ fun SellerDashboard() {
     var importProgress by remember { mutableIntStateOf(0) }
     var isImporting by remember { mutableStateOf(false) }
 
-    LaunchedEffect(library) {\n        videoLibrary = runCatching { library.getAll() }.getOrDefault(emptyList())\n    }\n\n    suspend fun rememberImported(video: ImportedVideo) {\n        library.save(video)\n        videoLibrary = library.getAll()\n        importedVideo = video\n    }\n\n    fun showError(error: Throwable) {
+    LaunchedEffect(library) {
+        videoLibrary = runCatching { library.getAll() }.getOrDefault(emptyList())
+    }
+
+    suspend fun rememberImported(video: ImportedVideo) {
+        library.save(video)
+        videoLibrary = library.getAll()
+        importedVideo = video
+    }
+
+    fun showError(error: Throwable) {
         importStatus = error.message ?: "Không thể nhận video. Vui lòng thử lại."
         isImporting = false
     }
@@ -70,7 +80,7 @@ fun SellerDashboard() {
                 importStatus = "Đang lưu video trực tiếp vào thư mục Movies/LONGKAKA SELLER AI trên điện thoại…"
                 try {
                     val result = importer.importFromUri(uri) { importProgress = it }
-                    importedVideo = result
+                    rememberImported(result)
                     importProgress = 100
                     importStatus = "Đã nhận video từ điện thoại thành công."
                 } catch (error: Throwable) {
@@ -115,7 +125,7 @@ fun SellerDashboard() {
                             importStatus = "Đang kiểm tra link và tải video…"
                             try {
                                 val result = importer.importFromDirectLink(sourceUrl) { importProgress = it }
-                                importedVideo = result
+                                rememberImported(result)
                                 importProgress = 100
                                 importStatus = "Đã nhận video từ đường link thành công."
                             } catch (error: Throwable) {
