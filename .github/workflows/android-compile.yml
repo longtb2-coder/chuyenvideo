@@ -1,7 +1,11 @@
 name: Android APK build verification
 
 on:
-  # Manual only while modules are being designed and reviewed.
+  # Build every committed change on the integration branch so APKs are reproducible.
+  push:
+    branches: [foundation/architecture]
+  pull_request:
+    branches: [foundation/architecture]
   workflow_dispatch:
 
 jobs:
