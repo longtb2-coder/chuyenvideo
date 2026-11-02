@@ -51,6 +51,7 @@ fun SellerDashboard() {
     val library = remember(context) { VideoLibraryRepository(context.applicationContext) }
     val overlayTranslator = remember(context) { ChineseOverlayTranslator(context.applicationContext) }
     var translatedOverlays by remember { mutableStateOf<List<OnScreenText>>(emptyList()) }
+    var editedTranslations by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
     var scanStatus by remember { mutableStateOf("Chưa quét chữ trên hình.") }
     var scanProgress by remember { mutableIntStateOf(0) }
     var isScanning by remember { mutableStateOf(false) }
@@ -216,6 +217,7 @@ fun SellerDashboard() {
                                 scanProgress = 0
                                 scanStatus = "Đang quét chữ Trung trên các khung hình…"
                                 translatedOverlays = emptyList()
+                                editedTranslations = emptyMap()
                                 try {
                                     translatedOverlays = overlayTranslator.scanAndTranslate(
                                         Uri.parse(video.contentUri),
@@ -245,10 +247,15 @@ fun SellerDashboard() {
                 translatedOverlays.forEachIndexed { index, item ->
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Vùng chữ ${index + 1} • ${formatDuration(item.timeMs)}",
+                            Text("Vùng chữ ${index + 1} • ${formatDuration(item.timeMs)} – ${formatDuration(item.lastTimeMs)}",
                                 style = MaterialTheme.typography.labelSmall)
                             Text("Gốc: ${item.sourceText}", style = MaterialTheme.typography.bodySmall)
-                            Text("Tiếng Việt: ${item.vietnameseText}", style = MaterialTheme.typography.bodyMedium)
+                            OutlinedTextField(
+                                value = editedTranslations[index] ?: item.vietnameseText,
+                                onValueChange = { value -> editedTranslations = editedTranslations + (index to value) },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Bản dịch tiếng Việt (có thể sửa)") }
+                            )
                         }
                     }
                 }
