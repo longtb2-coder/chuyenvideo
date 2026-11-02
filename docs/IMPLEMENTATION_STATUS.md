@@ -11,8 +11,8 @@ This branch contains an Android source foundation and the first functional video
 
 ## Video intake — implemented in source
 - Android Storage Access Framework picker for user-selected video files.
-- Selected source is copied into app-private `files/managed_media`; the source file is not modified or deleted.
-- Basic validation of MIME type / video extension, file size cap (2 GB), and available storage.
+- Selected source is copied into the phone's shared `Movies/LONGKAKA SELLER AI` folder through MediaStore; the source file is not modified or deleted.
+- Basic validation of MIME type / video extension and available storage. No arbitrary fixed file-size cap; import is limited by actual free phone storage and file-system constraints.
 - Reads duration, width and height using Android `MediaMetadataRetriever`.
 - Displays import progress, filename, duration, resolution and file size.
 - HTTPS direct-file downloader for URLs whose HTTP response is an actual `video/*` stream.
@@ -20,8 +20,8 @@ This branch contains an Android source foundation and the first functional video
 
 ## Video intake — known limits
 - Social-platform page URLs (TikTok, Facebook, Shopee, Douyin) are not universal direct video files. Login walls, anti-bot controls, expiring signatures and platform policies can prevent direct retrieval. The app reports non-video responses and provides the local-file fallback; it does not pretend every page URL can be downloaded.
-- Current import storage is app-private and is not yet indexed in Room. Project library, rename/delete controls, duplicate detection and restart recovery are still pending.
-- The 2 GB cap is a safety limit for the first intake implementation and can be tuned after testing on real devices.
+- Imported files are visible in the phone's Files/Gallery under Movies/LONGKAKA SELLER AI. The app's persistent project index in Room, rename/delete controls, duplicate detection and restart recovery are still pending.
+- Large files are accepted when sufficient free storage exists; import reserves a safety margin of free space.
 - The imported file remains in app storage until a future project/file-management screen provides explicit deletion controls.
 
 ## Not implemented yet
