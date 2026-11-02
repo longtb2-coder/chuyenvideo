@@ -1,36 +1,42 @@
-# Implementation status — foundation build
+# Implementation status — foundation and video intake
 
-This commit establishes an initial Android source skeleton. It is not a production-ready video editor.
+This branch contains an Android source foundation and the first functional video-intake slice. It is not yet a complete seller-video editor.
 
-## Step 1 — Android shell
+## Android shell
 - Kotlin + Jetpack Compose application module.
 - Application ID: `ai.longkaka.seller`.
 - Min SDK 26; compile/target SDK 36.
 - Java 17 toolchain target.
-- Compile-only GitHub Actions workflow added; it does not package or publish an APK.
+- GitHub Actions now runs `:app:assembleDebug` and uploads a debug APK artifact when successful.
 
-## Step 2 — UI shell
-- One-screen dark navy / cyan / gold Seller AI dashboard.
-- Local video picker through Android's document picker.
-- URL field is informational until per-platform import adapters are implemented.
+## Video intake — implemented in source
+- Android Storage Access Framework picker for user-selected video files.
+- Selected source is copied into app-private `files/managed_media`; the source file is not modified or deleted.
+- Basic validation of MIME type / video extension, file size cap (2 GB), and available storage.
+- Reads duration, width and height using Android `MediaMetadataRetriever`.
+- Displays import progress, filename, duration, resolution and file size.
+- HTTPS direct-file downloader for URLs whose HTTP response is an actual `video/*` stream.
+- Network and local imports use on-device Android APIs; no paid API, account or remote backend is required for this intake path.
 
-## Step 3 — Media foundation
-- Typed media job and pipeline stage model.
-- Provider-neutral processor interface.
-- No FFmpeg renderer is connected yet.
+## Video intake — known limits
+- Social-platform page URLs (TikTok, Facebook, Shopee, Douyin) are not universal direct video files. Login walls, anti-bot controls, expiring signatures and platform policies can prevent direct retrieval. The app reports non-video responses and provides the local-file fallback; it does not pretend every page URL can be downloaded.
+- Current import storage is app-private and is not yet indexed in Room. Project library, rename/delete controls, duplicate detection and restart recovery are still pending.
+- The 2 GB cap is a safety limit for the first intake implementation and can be tuned after testing on real devices.
+- The imported file remains in app storage until a future project/file-management screen provides explicit deletion controls.
 
-## Step 4 — Background foundation
-- WorkManager worker boundary exists.
-- Worker deliberately does not report success until a real processor is connected.
-- Foreground execution, persistent job database, notification channel, cancellation and recovery tests remain to be implemented before long jobs are enabled.
+## Not implemented yet
+- Room database and persistent project/job library.
+- Foreground long-running worker, notification, cancellation and retry/recovery.
+- Media probing beyond basic metadata, thumbnails and codec compatibility warnings.
+- OCR, ASR, translation, text cleanup/inpainting, Vietnamese TTS, subtitle editor and video renderer/export.
+- Production signing, release APK and in-device acceptance tests.
+- Approved icon PNG binary and adaptive launcher assets.
 
-## Step 5 — AI integration boundaries
-- AI work is represented by replaceable processor contracts.
-- OCR, speech recognition, translation, inpainting, TTS and subtitle timing are not yet implemented.
-- Provider selection must be based on tested quality, licensing, device support, actual free quotas and privacy terms.
-
-## Icon
-The approved icon is documented in `docs/BRAND_AND_ICON.md`. The original PNG binary still needs to be added to the repository and converted into adaptive launcher assets. The available GitHub text-file integration cannot upload the attached binary directly.
+## Free-first policy
+- Local import and direct HTTPS file intake are free and run without paid services.
+- AI capabilities must be selected only after checking license, device requirements, privacy terms and real free quotas. No unlimited-free cloud service is promised.
+- Do not embed paid-provider API keys in the APK or public repository.
 
 ## Verification
-No APK has been assembled or published. The compile workflow must pass before the foundation can be called build-verified. A Gradle wrapper is still required for a reproducible phone-friendly build path.
+- Earlier workflow run `41427093609` passed Kotlin compilation only; it did not package an APK.
+- The updated workflow now assembles a debug APK and uploads it as `longkaka-seller-ai-debug`. The new run must finish successfully before claiming the APK is available.
