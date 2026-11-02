@@ -133,9 +133,10 @@ fun SellerDashboard() {
                     androidx.compose.material3.Icon(Icons.Rounded.UploadFile, contentDescription = null)
                     Text("Chọn video từ điện thoại")
                 }
-                if (isImporting) LinearProgressIndicator(
-                    progress = { importProgress / 100f }, modifier = Modifier.fillMaxWidth()
-                )
+                if (isImporting) {
+                    if (importProgress < 0) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    else LinearProgressIndicator(progress = { importProgress / 100f }, modifier = Modifier.fillMaxWidth())
+                }
                 Text(importStatus, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 importedVideo?.let { video ->
