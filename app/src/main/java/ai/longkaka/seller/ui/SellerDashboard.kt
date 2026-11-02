@@ -42,6 +42,7 @@ import ai.longkaka.seller.media.VideoImportRepository
 import ai.longkaka.seller.media.VideoLibraryRepository
 import ai.longkaka.seller.translation.ChineseOverlayTranslator
 import ai.longkaka.seller.translation.OnScreenText
+import ai.longkaka.seller.translation.ProductCategory
 import ai.longkaka.seller.processing.TextRegionInpainting
 import ai.longkaka.seller.processing.VideoFrameRepairPreview
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +59,7 @@ fun SellerDashboard() {
     val overlayTranslator = remember(context) { ChineseOverlayTranslator(context.applicationContext) }
     var translatedOverlays by remember { mutableStateOf<List<OnScreenText>>(emptyList()) }
     var editedTranslations by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
+    var selectedCategory by remember { mutableStateOf(ProductCategory.AUTO) }
     var scanStatus by remember { mutableStateOf("Chưa quét chữ trên hình.") }
     var scanProgress by remember { mutableIntStateOf(0) }
     var isScanning by remember { mutableStateOf(false) }
@@ -216,7 +218,17 @@ fun SellerDashboard() {
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("03  •  XỬ LÝ AI", style = MaterialTheme.typography.titleMedium)
-                ToolRow(Icons.Rounded.Translate, "Nhận diện & dịch chữ Trung trên hình", "OCR theo từng mốc video + dịch Việt ngoại tuyến")
+                ToolRow(Icons.Rounded.Translate, "Nhận diện & dịch chữ Trung trên hình", "Dịch theo ngữ cảnh ngành hàng, ưu tiên thuật ngữ sản phẩm")
+                OutlinedButton(
+                    onClick = {
+                        val categories = ProductCategory.values()
+                        val next = (categories.indexOf(selectedCategory) + 1) % categories.size
+                        selectedCategory = categories[next]
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("NGÀNH HÀNG: ${selectedCategory.label}  •  CHẠM ĐỂ ĐỔI") }
+                Text("Chọn đúng ngành hàng giúp tránh dịch máy móc. Tên thương hiệu, mã sản phẩm và thông số vẫn cần bạn kiểm tra ở bản xem trước.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(
                     onClick = {
                         val video = importedVideo
@@ -230,6 +242,7 @@ fun SellerDashboard() {
                                 try {
                                     translatedOverlays = overlayTranslator.scanAndTranslate(
                                         Uri.parse(video.contentUri),
+                                        category = selectedCategory,
                                         onProgress = { scanProgress = it }
                                     )
                                     scanStatus = if (translatedOverlays.isEmpty()) {
