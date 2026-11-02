@@ -79,10 +79,11 @@ class ChineseOverlayTranslator(private val context: Context) {
 
             for (index in 0 until frameCount) {
                 val timeMs = index * sampleIntervalMs
-                val bitmap: Bitmap = retriever.getFrameAtTime(
+                val bitmap = retriever.getFrameAtTime(
                     timeMs * 1_000L,
                     MediaMetadataRetriever.OPTION_CLOSEST
-                ) ?: run {
+                )
+                if (bitmap == null) {
                     onProgress(((index + 1) * 100 / frameCount).coerceIn(0, 100))
                     continue
                 }
