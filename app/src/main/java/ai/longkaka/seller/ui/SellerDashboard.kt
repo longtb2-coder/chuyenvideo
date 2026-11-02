@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import ai.longkaka.seller.media.ImportedVideo
 import ai.longkaka.seller.media.VideoImportRepository
 import ai.longkaka.seller.media.VideoLibraryRepository
+import ai.longkaka.seller.translation.ChineseOverlayTranslator
+import ai.longkaka.seller.translation.OnScreenText
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -47,6 +49,11 @@ fun SellerDashboard() {
     val scope = rememberCoroutineScope()
     val importer = remember(context) { VideoImportRepository(context.applicationContext) }
     val library = remember(context) { VideoLibraryRepository(context.applicationContext) }
+    val overlayTranslator = remember(context) { ChineseOverlayTranslator(context.applicationContext) }
+    var translatedOverlays by remember { mutableStateOf<List<OnScreenText>>(emptyList()) }
+    var scanStatus by remember { mutableStateOf("Chưa quét chữ trên hình.") }
+    var scanProgress by remember { mutableIntStateOf(0) }
+    var isScanning by remember { mutableStateOf(false) }
     var videoLibrary by remember { mutableStateOf<List<ImportedVideo>>(emptyList()) }
     var sourceUrl by remember { mutableStateOf("") }
     var importedVideo by remember { mutableStateOf<ImportedVideo?>(null) }
@@ -199,8 +206,53 @@ fun SellerDashboard() {
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("03  •  XỬ LÝ AI", style = MaterialTheme.typography.titleMedium)
-                ToolRow(Icons.Rounded.Translate, "Nhận diện & dịch tiếng Trung", "OCR, lời thoại và nội dung sản phẩm")
-                ToolRow(Icons.Rounded.AutoAwesome, "Làm sạch chữ trên video", "Làm mờ lớp chữ được phép chỉnh sửa")
+                ToolRow(Icons.Rounded.Translate, "Nhận diện & dịch chữ Trung trên hình", "OCR theo từng mốc video + dịch Việt ngoại tuyến")
+                Button(
+                    onClick = {
+                        val video = importedVideo
+                        if (video != null && !isScanning) {
+                            scope.launch {
+                                isScanning = true
+                                scanProgress = 0
+                                scanStatus = "Đang quét chữ Trung trên các khung hình…"
+                                translatedOverlays = emptyList()
+                                try {
+                                    translatedOverlays = overlayTranslator.scanAndTranslate(
+                                        Uri.parse(video.contentUri),
+                                        onProgress = { scanProgress = it }
+                                    )
+                                    scanStatus = if (translatedOverlays.isEmpty()) {
+                                        "Không tìm thấy đoạn chữ Trung đủ tin cậy trong video."
+                                    } else {
+                                        "Đã nhận diện và dịch ${translatedOverlays.size} vùng chữ. Hãy kiểm tra bản dịch."
+                                    }
+                                } catch (error: Throwable) {
+                                    scanStatus = error.message ?: "Quét chữ thất bại."
+                                } finally {
+                                    isScanning = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = importedVideo != null && !isScanning,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (isScanning) "ĐANG QUÉT & DỊCH…" else "QUÉT CHỮ TRUNG VÀ DỊCH SANG TIẾNG VIỆT") }
+                if (isScanning) {
+                    LinearProgressIndicator(progress = { scanProgress / 100f }, modifier = Modifier.fillMaxWidth())
+                }
+                Text(scanStatus, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                translatedOverlays.forEachIndexed { index, item ->
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Vùng chữ ${index + 1} • ${formatDuration(item.timeMs)}",
+                                style = MaterialTheme.typography.labelSmall)
+                            Text("Gốc: ${item.sourceText}", style = MaterialTheme.typography.bodySmall)
+                            Text("Tiếng Việt: ${item.vietnameseText}", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+                ToolRow(Icons.Rounded.AutoAwesome, "Làm sạch chữ trên video", "Bước phục hồi nền và chèn chữ Việt đang được tích hợp")
                 ToolRow(Icons.Rounded.Subtitles, "Tạo phụ đề tiếng Việt", "Căn thời gian và cho phép chỉnh sửa")
                 ToolRow(Icons.Rounded.CloudDownload, "Thay giọng đọc tiếng Việt", "Chọn giọng và nghe thử trước khi ghép")
             }
