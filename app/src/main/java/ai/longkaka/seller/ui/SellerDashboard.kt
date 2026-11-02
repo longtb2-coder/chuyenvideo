@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ai.longkaka.seller.media.ImportedVideo
 import ai.longkaka.seller.media.VideoImportRepository
+import ai.longkaka.seller.media.VideoLibraryRepository
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -45,13 +46,15 @@ fun SellerDashboard() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val importer = remember(context) { VideoImportRepository(context.applicationContext) }
+    val library = remember(context) { VideoLibraryRepository(context.applicationContext) }
+    var videoLibrary by remember { mutableStateOf<List<ImportedVideo>>(emptyList()) }
     var sourceUrl by remember { mutableStateOf("") }
     var importedVideo by remember { mutableStateOf<ImportedVideo?>(null) }
     var importStatus by remember { mutableStateOf("Chưa có video được nhập.") }
     var importProgress by remember { mutableIntStateOf(0) }
     var isImporting by remember { mutableStateOf(false) }
 
-    fun showError(error: Throwable) {
+    LaunchedEffect(library) {\n        videoLibrary = runCatching { library.getAll() }.getOrDefault(emptyList())\n    }\n\n    suspend fun rememberImported(video: ImportedVideo) {\n        library.save(video)\n        videoLibrary = library.getAll()\n        importedVideo = video\n    }\n\n    fun showError(error: Throwable) {
         importStatus = error.message ?: "Không thể nhận video. Vui lòng thử lại."
         isImporting = false
     }
@@ -161,7 +164,31 @@ fun SellerDashboard() {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("02  •  XỬ LÝ AI", style = MaterialTheme.typography.titleMedium)
+                Text("02  •  THƯ VIỆN VIDEO ĐÃ NHẬP", style = MaterialTheme.typography.titleMedium)
+                Text("Video được lưu trên điện thoại và danh sách vẫn còn khi mở lại ứng dụng.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (videoLibrary.isEmpty()) {
+                    Text("Chưa có video nào trong thư viện.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    videoLibrary.forEach { video ->
+                        OutlinedButton(
+                            onClick = { importedVideo = video },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(video.displayName, style = MaterialTheme.typography.titleSmall)
+                                Text("${formatDuration(video.durationMs)} • ${video.width} × ${video.height} • ${formatBytes(video.sizeBytes)}",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("03  •  XỬ LÝ AI", style = MaterialTheme.typography.titleMedium)
                 ToolRow(Icons.Rounded.Translate, "Nhận diện & dịch tiếng Trung", "OCR, lời thoại và nội dung sản phẩm")
                 ToolRow(Icons.Rounded.AutoAwesome, "Làm sạch chữ trên video", "Làm mờ lớp chữ được phép chỉnh sửa")
                 ToolRow(Icons.Rounded.Subtitles, "Tạo phụ đề tiếng Việt", "Căn thời gian và cho phép chỉnh sửa")
@@ -171,7 +198,7 @@ fun SellerDashboard() {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("03  •  THÀNH PHẨM", style = MaterialTheme.typography.titleMedium)
+                Text("04  •  THÀNH PHẨM", style = MaterialTheme.typography.titleMedium)
                 ToolRow(Icons.Rounded.Movie, "Biên tập video bán hàng", "Tỷ lệ dọc 9:16 • phụ đề • giá • CTA")
                 Button(onClick = { /* Export pipeline is not connected yet. */ },
                     enabled = importedVideo != null && !isImporting,
