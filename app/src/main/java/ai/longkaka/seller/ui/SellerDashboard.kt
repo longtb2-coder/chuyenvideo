@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -60,6 +61,7 @@ fun SellerDashboard() {
     var translatedOverlays by remember { mutableStateOf<List<OnScreenText>>(emptyList()) }
     var editedTranslations by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
     var selectedCategory by remember { mutableStateOf(ProductCategory.AUTO) }
+    var selectedRemovalIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var scanStatus by remember { mutableStateOf("Chưa quét chữ trên hình.") }
     var scanProgress by remember { mutableIntStateOf(0) }
     var isScanning by remember { mutableStateOf(false) }
@@ -239,6 +241,7 @@ fun SellerDashboard() {
                                 scanStatus = "Đang quét chữ Trung trên các khung hình…"
                                 translatedOverlays = emptyList()
                                 editedTranslations = emptyMap()
+                                selectedRemovalIndices = emptySet()
                                 try {
                                     translatedOverlays = overlayTranslator.scanAndTranslate(
                                         Uri.parse(video.contentUri),
@@ -272,6 +275,15 @@ fun SellerDashboard() {
                             Text("Vùng chữ ${index + 1} • ${formatDuration(item.timeMs)} – ${formatDuration(item.lastTimeMs)}",
                                 style = MaterialTheme.typography.labelSmall)
                             Text("Gốc: ${item.sourceText}", style = MaterialTheme.typography.bodySmall)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = index in selectedRemovalIndices,
+                                    onCheckedChange = { checked ->
+                                        selectedRemovalIndices = if (checked) selectedRemovalIndices + index else selectedRemovalIndices - index
+                                    }
+                                )
+                                Text("Chọn vùng này để thử làm sạch chữ", style = MaterialTheme.typography.bodySmall)
+                            }
                             OutlinedTextField(
                                 value = editedTranslations[index] ?: item.vietnameseText,
                                 onValueChange = { value -> editedTranslations = editedTranslations + (index to value) },
@@ -282,18 +294,20 @@ fun SellerDashboard() {
                     }
                 }
                 if (translatedOverlays.isNotEmpty()) {
+                    Text("Chỉ chọn những chữ phủ do video thêm vào. Không chọn logo, nhãn hiệu, thông số in trên bao bì nếu muốn giữ nguyên.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedButton(
                         onClick = {
                             val video = importedVideo
-                            val first = translatedOverlays.first()
-                            if (video != null && !isRepairing) {
+                            val selected = selectedRemovalIndices.firstOrNull()?.let { translatedOverlays.getOrNull(it) }
+                            if (video != null && selected != null && !isRepairing) {
                                 scope.launch {
                                     isRepairing = true
                                     repairStatus = "Đang phục hồi thử một khung hình trên điện thoại…"
                                     try {
-                                        val region = TextRegionInpainting.Region(first.left, first.top, first.right, first.bottom)
+                                        val region = TextRegionInpainting.Region(selected.left, selected.top, selected.right, selected.bottom)
                                         val bitmap = withContext(Dispatchers.Default) {
-                                            VideoFrameRepairPreview.create(context, Uri.parse(video.contentUri), first.timeMs, listOf(region))
+                                            VideoFrameRepairPreview.create(context, Uri.parse(video.contentUri), selected.timeMs, listOf(region))
                                         }
                                         repairPreview?.recycle()
                                         repairPreview = bitmap
@@ -306,9 +320,9 @@ fun SellerDashboard() {
                                 }
                             }
                         },
-                        enabled = !isRepairing && importedVideo != null,
+                        enabled = !isRepairing && importedVideo != null && selectedRemovalIndices.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text(if (isRepairing) "ĐANG PHỤC HỒI KHUNG HÌNH…" else "THỬ XÓA CHỮ TRÊN 1 KHUNG HÌNH") }
+                    ) { Text(if (isRepairing) "ĐANG PHỤC HỒI KHUNG HÌNH…" else "THỬ XÓA VÙNG ĐÃ CHỌN TRÊN 1 KHUNG HÌNH") }
                     Text(repairStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     repairPreview?.let { bitmap ->
                         Image(bitmap.asImageBitmap(), contentDescription = "Khung hình sau phục hồi chữ",
