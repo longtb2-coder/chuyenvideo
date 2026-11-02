@@ -52,6 +52,7 @@ class ChineseOverlayTranslator(private val context: Context) {
         videoUri: Uri,
         sampleIntervalMs: Long = 1_500L,
         maxFrames: Int = 600,
+        category: ProductCategory = ProductCategory.AUTO,
         onProgress: (Int) -> Unit = {}
     ): List<OnScreenText> {
         require(sampleIntervalMs >= 500L) { "Khoảng lấy mẫu phải từ 0,5 giây trở lên." }
@@ -142,7 +143,9 @@ class ChineseOverlayTranslator(private val context: Context) {
             }
 
             return tracks.map { track ->
-                val translated = translator.translate(track.displayText).awaitTask()
+                val translated = translateForProduct(track.displayText, category) { phrase ->
+                    translator.translate(phrase).awaitTask()
+                }
                 OnScreenText(
                     sourceText = track.displayText,
                     vietnameseText = translated,
@@ -160,6 +163,71 @@ class ChineseOverlayTranslator(private val context: Context) {
             retriever.release()
         }
     }
+}
+
+
+private suspend fun translateForProduct(
+    source: String,
+    category: ProductCategory,
+    fallback: suspend (String) -> String
+): String {
+    val normalized = source.replace(Regex("\\s+"), "").trim()
+    val common = mapOf(
+        "限时抢购" to "Ưu đãi trong thời gian có hạn",
+        "买一送一" to "Mua 1 tặng 1",
+        "包邮" to "Miễn phí vận chuyển",
+        "正品保证" to "Cam kết hàng chính hãng",
+        "新品上市" to "Sản phẩm mới ra mắt",
+        "立即购买" to "Mua ngay",
+        "售后无忧" to "Yên tâm với dịch vụ hậu mãi",
+        "厂家直销" to "Bán trực tiếp từ nhà sản xuất",
+        "库存有限" to "Số lượng có hạn",
+        "热卖中" to "Đang bán chạy",
+        "爆款" to "Sản phẩm bán chạy",
+        "优惠价" to "Giá ưu đãi",
+        "全场包邮" to "Miễn phí vận chuyển toàn bộ đơn hàng",
+        "质量保证" to "Đảm bảo chất lượng"
+    )
+    val categoryTerms = when (category) {
+        ProductCategory.CLOTHING -> mapOf(
+            "显瘦" to "Tôn dáng, tạo cảm giác thon gọn", "修身" to "Ôm dáng",
+            "宽松" to "Dáng rộng thoải mái", "亲肤" to "Mềm mại, thân thiện với da",
+            "透气" to "Thoáng khí", "高腰" to "Cạp cao", "垂感" to "Độ rủ mềm mại",
+            "不起球" to "Hạn chế xù lông", "不褪色" to "Hạn chế phai màu",
+            "显腿长" to "Tạo hiệu ứng chân dài"
+        )
+        ProductCategory.COSMETICS -> mapOf(
+            "补水" to "Cấp nước", "保湿" to "Dưỡng ẩm", "提亮" to "Làm sáng da",
+            "控油" to "Kiểm soát dầu", "温和" to "Dịu nhẹ", "敏感肌" to "Da nhạy cảm",
+            "细腻" to "Mịn màng", "持久" to "Lâu trôi, bền màu"
+        )
+        ProductCategory.HOME -> mapOf(
+            "收纳" to "Lưu trữ, sắp xếp đồ đạc", "便携" to "Thiết kế tiện mang theo",
+            "防滑" to "Chống trượt", "耐用" to "Bền chắc", "易清洗" to "Dễ vệ sinh",
+            "承重" to "Khả năng chịu tải", "静音" to "Hoạt động êm ái"
+        )
+        ProductCategory.ELECTRONICS -> mapOf(
+            "续航" to "Thời lượng pin", "快充" to "Sạc nhanh", "高清" to "Độ phân giải cao",
+            "蓝牙" to "Bluetooth", "兼容" to "Tương thích", "功率" to "Công suất",
+            "智能" to "Thông minh"
+        )
+        ProductCategory.SHOES_BAGS -> mapOf(
+            "防水" to "Chống nước", "轻便" to "Nhẹ, tiện di chuyển", "耐磨" to "Chống mài mòn",
+            "透气" to "Thoáng khí", "容量" to "Dung tích / sức chứa"
+        )
+        ProductCategory.FOOD -> mapOf(
+            "口感" to "Hương vị và cảm giác khi thưởng thức", "新鲜" to "Tươi ngon",
+            "配料" to "Thành phần", "保质期" to "Hạn sử dụng", "无添加" to "Không添加 phụ gia"
+        )
+        ProductCategory.ACCESSORIES -> mapOf(
+            "轻便" to "Nhẹ, tiện mang theo", "防水" to "Chống nước",
+            "耐磨" to "Chống mài mòn", "精致" to "Thiết kế tinh tế"
+        )
+        else -> emptyMap()
+    }
+    val exact = categoryTerms[normalized] ?: common[normalized]
+    if (exact != null) return exact
+    return fallback(source)
 }
 
 private suspend fun <T> Task<T>.awaitTask(): T = suspendCancellableCoroutine { continuation ->
