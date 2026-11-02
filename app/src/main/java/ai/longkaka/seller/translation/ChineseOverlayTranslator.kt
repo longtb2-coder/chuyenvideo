@@ -15,6 +15,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import com.google.android.gms.tasks.Task
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlin.math.hypot
 
 data class OnScreenText(
     val sourceText: String,
@@ -28,11 +29,25 @@ data class OnScreenText(
 )
 
 /**
- * On-device Chinese OCR + Chinese-to-Vietnamese translation.
- * Frames are sampled sparsely to keep memory and battery use bounded.
- * This stage detects/translates overlays; it does not erase pixels or render a replacement video.
+ * Samples video frames, recognizes Chinese text and groups observations into separate
+ * time/position tracks. Identical text in two different screen locations is not merged.
+ * This stage does not itself erase pixels or render a replacement video.
  */
 class ChineseOverlayTranslator(private val context: Context) {
+    private data class Track(
+        val normalizedText: String,
+        var displayText: String,
+        var firstTimeMs: Long,
+        var lastTimeMs: Long,
+        var left: Float,
+        var top: Float,
+        var right: Float,
+        var bottom: Float
+    ) {
+        val centerX: Float get() = (left + right) / 2f
+        val centerY: Float get() = (top + bottom) / 2f
+    }
+
     suspend fun scanAndTranslate(
         videoUri: Uri,
         sampleIntervalMs: Long = 1_500L,
@@ -40,6 +55,8 @@ class ChineseOverlayTranslator(private val context: Context) {
         onProgress: (Int) -> Unit = {}
     ): List<OnScreenText> {
         require(sampleIntervalMs >= 500L) { "Khoảng lấy mẫu phải từ 0,5 giây trở lên." }
+        require(maxFrames > 0) { "Số khung hình quét phải lớn hơn 0." }
+
         val retriever = MediaMetadataRetriever()
         val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
         val translator = Translation.getClient(
@@ -48,55 +65,72 @@ class ChineseOverlayTranslator(private val context: Context) {
                 .setTargetLanguage(TranslateLanguage.VIETNAMESE)
                 .build()
         )
-        val unique = linkedMapOf<String, OnScreenText>()
+        val tracks = mutableListOf<Track>()
         try {
             retriever.setDataSource(context, videoUri)
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
             require(duration > 0L) { "Không đọc được thời lượng video." }
-            val frameCount = minOf(((duration + sampleIntervalMs - 1) / sampleIntervalMs).toInt(), maxFrames)
-            val conditions = DownloadConditions.Builder().build()
-            translator.downloadModelIfNeeded(conditions).awaitTask()
+            val frameCount = minOf(
+                ((duration + sampleIntervalMs - 1) / sampleIntervalMs).toInt().coerceAtLeast(1),
+                maxFrames
+            )
+            translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).awaitTask()
+
             for (index in 0 until frameCount) {
                 val timeMs = index * sampleIntervalMs
                 val bitmap: Bitmap = retriever.getFrameAtTime(
                     timeMs * 1_000L,
                     MediaMetadataRetriever.OPTION_CLOSEST
-                ) ?: continue
+                ) ?: run {
+                    onProgress(((index + 1) * 100 / frameCount).coerceIn(0, 100))
+                    continue
+                }
                 try {
                     val result = recognizer.process(InputImage.fromBitmap(bitmap, 0)).awaitTask()
                     result.textBlocks.forEach { block ->
                         val text = block.text.trim()
-                        if (text.any { it.code in 0x3400..0x9FFF || it.code in 0xF900..0xFAFF }) {
-                            val key = text.replace(Regex("\\s+"), "")
-                            val box = block.boundingBox
-                            if (box != null) {
-                                val normalizedLeft = (box.left.toFloat() / bitmap.width).coerceIn(0f, 1f)
-                                val normalizedTop = (box.top.toFloat() / bitmap.height).coerceIn(0f, 1f)
-                                val normalizedRight = (box.right.toFloat() / bitmap.width).coerceIn(0f, 1f)
-                                val normalizedBottom = (box.bottom.toFloat() / bitmap.height).coerceIn(0f, 1f)
-                                val previous = unique[key]
-                                if (previous != null) {
-                                    unique[key] = previous.copy(
-                                        lastTimeMs = timeMs,
-                                        left = minOf(previous.left, normalizedLeft),
-                                        top = minOf(previous.top, normalizedTop),
-                                        right = maxOf(previous.right, normalizedRight),
-                                        bottom = maxOf(previous.bottom, normalizedBottom)
-                                    )
-                                } else {
-                                    val translated = translator.translate(text).awaitTask()
-                                    unique[key] = OnScreenText(
-                                        sourceText = text,
-                                        vietnameseText = translated,
-                                        timeMs = timeMs,
-                                        lastTimeMs = timeMs,
-                                        left = normalizedLeft,
-                                        top = normalizedTop,
-                                        right = normalizedRight,
-                                        bottom = normalizedBottom
-                                    )
+                        val containsChinese = text.any {
+                            it.code in 0x3400..0x9FFF || it.code in 0xF900..0xFAFF
+                        }
+                        val box = block.boundingBox
+                        if (containsChinese && box != null) {
+                            val left = (box.left.toFloat() / bitmap.width).coerceIn(0f, 1f)
+                            val top = (box.top.toFloat() / bitmap.height).coerceIn(0f, 1f)
+                            val right = (box.right.toFloat() / bitmap.width).coerceIn(left, 1f)
+                            val bottom = (box.bottom.toFloat() / bitmap.height).coerceIn(top, 1f)
+                            val normalized = text.replace(Regex("\\s+"), "")
+                            val cx = (left + right) / 2f
+                            val cy = (top + bottom) / 2f
+
+                            // Match only a recent observation at approximately the same location.
+                            // A new scene or a second copy elsewhere becomes a separate track.
+                            val candidate = tracks
+                                .filter { it.normalizedText == normalized }
+                                .filter { timeMs - it.lastTimeMs <= sampleIntervalMs * 3 }
+                                .filter { hypot((it.centerX - cx).toDouble(), (it.centerY - cy).toDouble()) <= 0.13 }
+                                .minByOrNull {
+                                    hypot((it.centerX - cx).toDouble(), (it.centerY - cy).toDouble())
                                 }
+
+                            if (candidate == null) {
+                                tracks += Track(
+                                    normalizedText = normalized,
+                                    displayText = text,
+                                    firstTimeMs = timeMs,
+                                    lastTimeMs = timeMs,
+                                    left = left,
+                                    top = top,
+                                    right = right,
+                                    bottom = bottom
+                                )
+                            } else {
+                                candidate.lastTimeMs = timeMs
+                                candidate.left = minOf(candidate.left, left)
+                                candidate.top = minOf(candidate.top, top)
+                                candidate.right = maxOf(candidate.right, right)
+                                candidate.bottom = maxOf(candidate.bottom, bottom)
+                                if (text.length > candidate.displayText.length) candidate.displayText = text
                             }
                         }
                     }
@@ -105,7 +139,20 @@ class ChineseOverlayTranslator(private val context: Context) {
                 }
                 onProgress(((index + 1) * 100 / frameCount).coerceIn(0, 100))
             }
-            return unique.values.toList()
+
+            return tracks.map { track ->
+                val translated = translator.translate(track.displayText).awaitTask()
+                OnScreenText(
+                    sourceText = track.displayText,
+                    vietnameseText = translated,
+                    timeMs = track.firstTimeMs,
+                    lastTimeMs = track.lastTimeMs,
+                    left = track.left,
+                    top = track.top,
+                    right = track.right,
+                    bottom = track.bottom
+                )
+            }
         } finally {
             recognizer.close()
             translator.close()
