@@ -217,7 +217,7 @@ private suspend fun translateForProduct(
         )
         ProductCategory.FOOD -> mapOf(
             "口感" to "Hương vị và cảm giác khi thưởng thức", "新鲜" to "Tươi ngon",
-            "配料" to "Thành phần", "保质期" to "Hạn sử dụng", "无添加" to "Không添加 phụ gia"
+            "配料" to "Thành phần", "保质期" to "Hạn sử dụng", "无添加" to "Không thêm phụ gia"
         )
         ProductCategory.ACCESSORIES -> mapOf(
             "轻便" to "Nhẹ, tiện mang theo", "防水" to "Chống nước",
