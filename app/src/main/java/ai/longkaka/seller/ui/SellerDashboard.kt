@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -32,14 +33,50 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import ai.longkaka.seller.media.ImportedVideo
+import ai.longkaka.seller.media.VideoImportRepository
+import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun SellerDashboard() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val importer = remember(context) { VideoImportRepository(context.applicationContext) }
     var sourceUrl by remember { mutableStateOf("") }
-    var selectedVideo by remember { mutableStateOf<Uri?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        selectedVideo = uri
+    var importedVideo by remember { mutableStateOf<ImportedVideo?>(null) }
+    var importStatus by remember { mutableStateOf("Chưa có video được nhập.") }
+    var importProgress by remember { mutableIntStateOf(0) }
+    var isImporting by remember { mutableStateOf(false) }
+
+    fun showError(error: Throwable) {
+        importStatus = error.message ?: "Không thể nhận video. Vui lòng thử lại."
+        isImporting = false
+    }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null && !isImporting) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            scope.launch {
+                isImporting = true
+                importProgress = 0
+                importStatus = "Đang sao chép video vào thư viện riêng của ứng dụng…"
+                try {
+                    val result = importer.importFromUri(uri) { importProgress = it }
+                    importedVideo = result
+                    importProgress = 100
+                    importStatus = "Đã nhận video từ điện thoại thành công."
+                } catch (error: Throwable) {
+                    showError(error)
+                } finally {
+                    isImporting = false
+                }
+            }
+        }
     }
 
     Column(
@@ -59,19 +96,65 @@ fun SellerDashboard() {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("01  •  NGUỒN VIDEO", style = MaterialTheme.typography.titleMedium)
+                Text("01  •  NHẬP VÀ TIẾP NHẬN VIDEO", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(
                     value = sourceUrl, onValueChange = { sourceUrl = it },
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text("Dán link video (nếu nguồn hỗ trợ)") },
-                    placeholder = { Text("TikTok / Facebook / Douyin / Shopee") }
+                    label = { Text("Dán link video trực tiếp (HTTPS)") },
+                    placeholder = { Text("Link tệp MP4 / MOV / WEBM…") },
+                    enabled = !isImporting
                 )
-                OutlinedButton(onClick = { picker.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            isImporting = true
+                            importProgress = 0
+                            importStatus = "Đang kiểm tra link và tải video…"
+                            try {
+                                val result = importer.importFromDirectLink(sourceUrl) { importProgress = it }
+                                importedVideo = result
+                                importProgress = 100
+                                importStatus = "Đã nhận video từ đường link thành công."
+                            } catch (error: Throwable) {
+                                showError(error)
+                            } finally {
+                                isImporting = false
+                            }
+                        }
+                    },
+                    enabled = sourceUrl.isNotBlank() && !isImporting,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("NHẬN VIDEO TỪ LINK") }
+                OutlinedButton(
+                    onClick = { picker.launch(arrayOf("video/*")) },
+                    enabled = !isImporting,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     androidx.compose.material3.Icon(Icons.Rounded.UploadFile, contentDescription = null)
-                    Text(if (selectedVideo == null) "Chọn video trong điện thoại" else "Đã chọn video")
+                    Text("Chọn video trong điện thoại")
                 }
-                Text("Nhập link có thể bị giới hạn bởi nền tảng. Chọn video từ máy là phương án dự phòng ổn định nhất.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (isImporting) LinearProgressIndicator(
+                    progress = { importProgress / 100f }, modifier = Modifier.fillMaxWidth()
+                )
+                Text(importStatus, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                importedVideo?.let { video ->
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(video.displayName, style = MaterialTheme.typography.titleSmall)
+                            Text("Thời lượng: ${formatDuration(video.durationMs)}  •  ${video.width} × ${video.height}",
+                                style = MaterialTheme.typography.bodySmall)
+                            Text("Dung lượng: ${formatBytes(video.sizeBytes)}",
+                                style = MaterialTheme.typography.bodySmall)
+                            Text("Đã lưu bản làm việc riêng trong ứng dụng",
+                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+                Text(
+                    "Link mạng xã hội có thể cần đăng nhập hoặc bị nền tảng giới hạn. Nếu link không phải tệp video trực tiếp, hãy tải video bằng chức năng hợp lệ của nền tảng rồi chọn tệp ở đây. Không xóa watermark hay dấu bản quyền.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -89,17 +172,29 @@ fun SellerDashboard() {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("03  •  THÀNH PHẨM", style = MaterialTheme.typography.titleMedium)
                 ToolRow(Icons.Rounded.Movie, "Biên tập video bán hàng", "Tỷ lệ dọc 9:16 • phụ đề • giá • CTA")
-                Button(onClick = { /* Pipeline is wired in the media foundation phase. */ },
-                    enabled = selectedVideo != null || sourceUrl.isNotBlank(),
+                Button(onClick = { /* Export pipeline is not connected yet. */ },
+                    enabled = importedVideo != null && !isImporting,
                     modifier = Modifier.fillMaxWidth()) {
                     Text("TẠO VIDEO BÁN HÀNG")
                 }
-                Text("Bản nền giao diện: các công cụ AI sẽ được bật khi từng bộ xử lý và dịch vụ được tích hợp, kiểm thử.",
+                Text("Hiện đã có bước nhận và lưu video. Các bộ xử lý AI và xuất video sẽ chỉ bật sau khi được tích hợp và kiểm thử.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Spacer(Modifier.height(10.dp))
     }
+}
+
+private fun formatDuration(durationMs: Long): String {
+    val totalSeconds = durationMs / 1000
+    return String.format(Locale.getDefault(), "%02d:%02d:%02d",
+        totalSeconds / 3600, (totalSeconds % 3600) / 60, totalSeconds % 60)
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L * 1024L -> String.format(Locale.getDefault(), "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+    bytes >= 1024L * 1024L -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
+    else -> "$bytes B"
 }
 
 @Composable
