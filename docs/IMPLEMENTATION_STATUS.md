@@ -1,12 +1,13 @@
 # Implementation status — foundation build
 
-This commit establishes the first Android source skeleton, not a production-ready video editor.
+This commit establishes an initial Android source skeleton. It is not a production-ready video editor.
 
 ## Step 1 — Android shell
 - Kotlin + Jetpack Compose application module.
 - Application ID: `ai.longkaka.seller`.
 - Min SDK 26; compile/target SDK 36.
 - Java 17 toolchain target.
+- Compile-only GitHub Actions workflow added; it does not package or publish an APK.
 
 ## Step 2 — UI shell
 - One-screen dark navy / cyan / gold Seller AI dashboard.
@@ -29,7 +30,7 @@ This commit establishes the first Android source skeleton, not a production-read
 - Provider selection must be based on tested quality, licensing, device support, actual free quotas and privacy terms.
 
 ## Icon
-The approved icon is documented in `docs/BRAND_AND_ICON.md`. The original PNG binary still needs to be added to the repository and converted into adaptive launcher assets. This text-only GitHub integration cannot upload the attached binary directly.
+The approved icon is documented in `docs/BRAND_AND_ICON.md`. The original PNG binary still needs to be added to the repository and converted into adaptive launcher assets. The available GitHub text-file integration cannot upload the attached binary directly.
 
-## Build and verification
-No APK has been assembled or published. A Gradle wrapper and CI compile verification are still needed before calling this foundation buildable.
+## Verification
+No APK has been assembled or published. The compile workflow must pass before the foundation can be called build-verified. A Gradle wrapper is still required for a reproducible phone-friendly build path.
