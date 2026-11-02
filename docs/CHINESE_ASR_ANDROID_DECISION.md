@@ -38,3 +38,10 @@ sherpa-onnx có các mô hình Paraformer Mandarin/Chinese-English offline. Mộ
 
 ## Giới hạn hiện tại
 Đây là quyết định kiến trúc dựa trên tài liệu upstream, chưa phải bằng chứng rằng mô hình đã chạy trên OPPO hoặc đã nhận diện chính xác video mẫu. Không bật nút xử lý thật cho đến khi có test chạy được và kết quả đo được.
+
+## Kiểm tra đóng gói Android (bổ sung)
+Tài liệu upstream hiện công bố release sherpa-onnx v2.0.1 có AAR Android khoảng 47.2 MB; hướng dẫn AAR chính thức chỉ cách tự đóng gói thư viện native cho từng ABI từ release archive. Vì vậy không nên tự thêm một tọa độ Maven đoán mò vào Gradle. Trước khi tích hợp cần lấy đúng AAR/release, kiểm tra checksum, ABI arm64-v8a và kiểm tra native load trên thiết bị.
+- Release: https://github.com/k2-fsa/sherpa-onnx/releases
+- Hướng dẫn AAR: https://github.com/k2-fsa/sherpa-onnx/tree/master/android/SherpaOnnxAar
+
+Mô hình SenseVoice int8 2025-09-09 được tài liệu liệt kê có file ONNX khoảng 226 MB. Tổng dung lượng tải ban đầu vì thế không chỉ là AAR; giao diện phải báo rõ dung lượng model và cho phép người dùng chọn tải khi có Wi-Fi. Đây là lý do không nhúng model vào APK.
