@@ -36,16 +36,28 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
         ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(videoUri)); prepare(); playWhenReady = false }
     }
     DisposableEffect(exoPlayer) { onDispose { exoPlayer.release() } }
+    val projectStore = remember(context) { EditorProjectStore(context) }
+    val translationDefaults = remember(overlays) { overlays.map { SavedLayerBox(it.left, it.top, (it.right-it.left).coerceAtLeast(.08f), (it.bottom-it.top).coerceAtLeast(.04f)) } }
+    val coverDefaults = remember(overlays) { overlays.map { SavedLayerBox((it.left-.01f).coerceAtLeast(0f), (it.top-.01f).coerceAtLeast(0f), (it.right-it.left+.02f).coerceAtMost(1f), (it.bottom-it.top+.02f).coerceAtMost(1f)) } }
+    val savedProject = remember(videoUri, overlays) { projectStore.load(videoUri, overlays.size, translationDefaults, coverDefaults) }
     var selected by remember(overlays) { mutableIntStateOf(0) }
     var layer by remember { mutableStateOf(EditorLayer.TRANSLATION) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
-    var translations by remember(overlays) { mutableStateOf(overlays.map { EditableOverlay(it.left, it.top, (it.right-it.left).coerceAtLeast(.08f), (it.bottom-it.top).coerceAtLeast(.04f)) }) }
-    var covers by remember(overlays) { mutableStateOf(overlays.map { EditableOverlay((it.left-.01f).coerceAtLeast(0f), (it.top-.01f).coerceAtLeast(0f), (it.right-it.left+.02f).coerceAtMost(1f), (it.bottom-it.top+.02f).coerceAtMost(1f)) }) }
-    var coverEnabled by remember(overlays) { mutableStateOf(overlays.map { true }) }
-    var coverColor by remember { mutableIntStateOf(0xFF111111.toInt()) }
-    var coverAlpha by remember { mutableFloatStateOf(1f) }
-    var textSize by remember { mutableFloatStateOf(16f) }
+    var translations by remember(overlays) { mutableStateOf((savedProject?.translations ?: translationDefaults).map { EditableOverlay(it.left,it.top,it.width,it.height) }) }
+    var covers by remember(overlays) { mutableStateOf((savedProject?.covers ?: coverDefaults).map { EditableOverlay(it.left,it.top,it.width,it.height) }) }
+    var coverEnabled by remember(overlays) { mutableStateOf(savedProject?.coverEnabled ?: overlays.map { true }) }
+    var coverColor by remember { mutableIntStateOf(savedProject?.coverColor ?: 0xFF111111.toInt()) }
+    var coverAlpha by remember { mutableFloatStateOf(savedProject?.coverAlpha ?: 1f) }
+    var textSize by remember { mutableFloatStateOf(savedProject?.textSize ?: 16f) }
+
+    LaunchedEffect(videoUri, translations, covers, coverEnabled, coverColor, coverAlpha, textSize, editedTexts) {
+        projectStore.save(videoUri, SavedEditorProject(
+            translations.map { SavedLayerBox(it.left,it.top,it.width,it.height) },
+            covers.map { SavedLayerBox(it.left,it.top,it.width,it.height) },
+            coverEnabled, coverColor, coverAlpha, textSize, editedTexts
+        ))
+    }
 
     LaunchedEffect(exoPlayer) {
         while (true) {
@@ -117,9 +129,9 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 }
                 if(layer==EditorLayer.COVER) {
                     Text("Chiều rộng khung: ${(covers[selected].width*100).roundToInt()}%")
-                    Slider(value=covers[selected].width,onValueChange={ v -> covers=covers.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,1f-covers[selected].left)) } },valueRange=.05f..1f)
+                    Slider(value=covers[selected].width,onValueChange={ v -> covers=covers.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,maxOf(.05f,1f-covers[selected].left))) } },valueRange=.05f..1f)
                     Text("Chiều cao khung: ${(covers[selected].height*100).roundToInt()}%")
-                    Slider(value=covers[selected].height,onValueChange={ v -> covers=covers.toMutableList().also { it[selected]=it[selected].copy(height=v.coerceIn(.03f,1f-covers[selected].top)) } },valueRange=.03f..1f)
+                    Slider(value=covers[selected].height,onValueChange={ v -> covers=covers.toMutableList().also { it[selected]=it[selected].copy(height=v.coerceIn(.03f,maxOf(.03f,1f-covers[selected].top))) } },valueRange=.03f..1f)
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Checkbox(checked=coverEnabled[selected],onCheckedChange={ v -> coverEnabled=coverEnabled.toMutableList().also { it[selected]=v } })
                         Text("Bật khung che chữ gốc")
@@ -135,9 +147,9 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     Slider(value=coverAlpha,onValueChange={coverAlpha=it},valueRange=.1f..1f)
                 } else {
                     Text("Chiều rộng vùng dịch: ${(translations[selected].width*100).roundToInt()}%")
-                    Slider(value=translations[selected].width,onValueChange={ v -> translations=translations.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,1f-translations[selected].left)) } },valueRange=.05f..1f)
+                    Slider(value=translations[selected].width,onValueChange={ v -> translations=translations.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,maxOf(.05f,1f-translations[selected].left))) } },valueRange=.05f..1f)
                     Text("Chiều cao vùng dịch: ${(translations[selected].height*100).roundToInt()}%")
-                    Slider(value=translations[selected].height,onValueChange={ v -> translations=translations.toMutableList().also { it[selected]=it[selected].copy(height=v.coerceIn(.03f,1f-translations[selected].top)) } },valueRange=.03f..1f)
+                    Slider(value=translations[selected].height,onValueChange={ v -> translations=translations.toMutableList().also { it[selected]=it[selected].copy(height=v.coerceIn(.03f,maxOf(.03f,1f-translations[selected].top))) } },valueRange=.03f..1f)
                     Text("Cỡ chữ dịch: ${textSize.roundToInt()} sp")
                     Slider(value=textSize,onValueChange={textSize=it},valueRange=10f..28f)
                 }
