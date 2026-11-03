@@ -10,6 +10,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -44,7 +45,7 @@ fun VieNeuNanoSetupCard(sourceText: String) {
         }
     }
 
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialThemeColor.surface), modifier = Modifier.fillMaxWidth()) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Text("VieNeu Nano • giọng đọc AI offline")
             Text("Mô hình ONNX + từ điển SEA-G2P. Không cần API trả phí; tải dữ liệu một lần.")
@@ -124,6 +125,3 @@ fun VieNeuNanoSetupCard(sourceText: String) {
     }
 }
 
-private object MaterialThemeColor {
-    val surface @Composable get() = androidx.compose.material3.MaterialTheme.colorScheme.surface
-}
