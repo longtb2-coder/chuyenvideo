@@ -25,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import ai.longkaka.seller.BuildConfig
 import ai.longkaka.seller.update.AppRelease
 import ai.longkaka.seller.update.AppUpdateRepository
 import ai.longkaka.seller.update.UpdateCheckResult
@@ -38,8 +37,14 @@ fun AppUpdateCard() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember { AppUpdateRepository() }
+    val currentVersion = remember(context) {
+        runCatching {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.1.0"
+        }.getOrDefault("0.1.0")
+    }
     var checking by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf("Phiên bản hiện tại: ${BuildConfig.VERSION_NAME}. Chạm để kiểm tra bản mới.") }
+    var status by remember { mutableStateOf("Phiên bản hiện tại: ${currentVersion}. Chạm để kiểm tra bản mới.") }
     var release by remember { mutableStateOf<AppRelease?>(null) }
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -57,7 +62,7 @@ fun AppUpdateCard() {
                         release = null
                         status = "Đang kiểm tra phiên bản mới…"
                         try {
-                            when (val result = withContext(Dispatchers.IO) { repository.check(BuildConfig.VERSION_NAME) }) {
+                            when (val result = withContext(Dispatchers.IO) { repository.check(currentVersion) }) {
                                 is UpdateCheckResult.Available -> {
                                     release = result.release
                                     status = "Có phiên bản mới: ${result.release.tagName}. ${result.release.title}"
