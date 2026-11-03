@@ -308,7 +308,7 @@ fun SellerDashboard() {
                 }
                 Text(scanStatus, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (workflowMode == SellerWorkflowMode.SHORT_FILM && importedVideo != null && translatedOverlays.isNotEmpty()) {
+                if (importedVideo != null && translatedOverlays.isNotEmpty()) {
                     VideoSubtitleEditor(
                         videoUri = Uri.parse(importedVideo!!.contentUri),
                         overlays = translatedOverlays,
@@ -394,13 +394,12 @@ fun SellerDashboard() {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("04  •  THÀNH PHẨM", style = MaterialTheme.typography.titleMedium)
                 ToolRow(Icons.Rounded.Movie, if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Dựng phim ngắn thuyết minh tiếng Việt" else "Biên tập video bán hàng", if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Khử chữ • phụ đề • giọng đọc • âm thanh gốc" else "Tỷ lệ dọc 9:16 • lợi ích • giá • CTA")
-                Button(onClick = { },
-                    enabled = false,
-                    modifier = Modifier.fillMaxWidth()) {
-                    Text(if (workflowMode == SellerWorkflowMode.SHORT_FILM) "XUẤT MP4 PHIM NGẮN (ĐANG HOÀN THIỆN)" else "XUẤT MP4 VIDEO BÁN HÀNG (ĐANG HOÀN THIỆN)")
-                }
-                Text("Đã có thể xuất phụ đề SRT sau khi quét và duyệt bản dịch. Xuất MP4 toàn quy trình chưa được bật để tránh tạo tệp video lỗi hoặc thiếu âm thanh.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (translatedOverlays.isNotEmpty()) "Dùng nút XUẤT VIDEO MP4 ĐÃ CHỈNH SỬA trong khung xem trước phía trên để kết xuất video thật."
+                    else "Nhập video và quét chữ trước. Sau khi có kết quả, trình chỉnh sửa và nút xuất MP4 sẽ xuất hiện.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
         BackgroundScanCard(videoUri = importedVideo?.let { Uri.parse(it.contentUri) }, category = selectedCategory)
