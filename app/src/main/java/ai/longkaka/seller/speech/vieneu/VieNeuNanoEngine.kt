@@ -21,6 +21,8 @@ import kotlin.math.roundToInt
  * Direct Kotlin/ONNX implementation of the pinned VieNeu v3 Nano reference path.
  * It is deliberately separate from Android's existing Offline TTS engine.
  */
+internal data class VieNeuChunkTiming(val text: String, val startMs: Long, val endMs: Long)
+
 internal class VieNeuNanoEngine(
     modelDirectory: File,
     private val threads: Int = 2
@@ -82,7 +84,8 @@ internal class VieNeuNanoEngine(
         voiceName: String,
         output: File,
         steps: Int = DEFAULT_STEPS,
-        onProgress: (completed: Int, total: Int) -> Unit = { _, _ -> }
+        onProgress: (completed: Int, total: Int) -> Unit = { _, _ -> },
+        onChunkTiming: (VieNeuChunkTiming) -> Unit = {}
     ): File {
         require(text.isNotBlank()) { "Kịch bản trống." }
         val voice = voices.firstOrNull { it.name == voiceName } ?: defaultVoice
@@ -97,12 +100,21 @@ internal class VieNeuNanoEngine(
                 file.write(ByteArray(44))
                 var totalSamples = 0L
                 chunks.forEachIndexed { index, chunk ->
+                    val chunkStartSamples = totalSamples
                     val phones = phonemizeWithEmotionCues(chunk.text)
                     val ids = encodePhones(phones)
                     val audio = trimAndFade(inferChunk(ids, voice, steps.coerceIn(4, 16)))
                     if (audio.isNotEmpty()) {
                         writePcmSamples(file, audio)
                         totalSamples += audio.size.toLong()
+                    }
+                    val chunkEndSamples = totalSamples
+                    if (chunkEndSamples > chunkStartSamples) {
+                        onChunkTiming(VieNeuChunkTiming(
+                            text = chunk.text,
+                            startMs = chunkStartSamples * 1000L / SAMPLE_RATE,
+                            endMs = chunkEndSamples * 1000L / SAMPLE_RATE
+                        ))
                     }
                     if (chunk.pauseAfterSeconds > 0f && index < chunks.lastIndex) {
                         val silenceSamples = (chunk.pauseAfterSeconds * SAMPLE_RATE).roundToInt().coerceAtLeast(0)
