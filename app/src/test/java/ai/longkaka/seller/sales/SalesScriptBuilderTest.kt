@@ -23,6 +23,19 @@ class SalesScriptBuilderTest {
         assertTrue(text.contains("Dễ mang theo"))
     }
 
+    @Test fun adaptsToneAndLengthWithoutInventingFacts() {
+        val brief = SalesProductBrief(
+            productName = "Bình giữ nhiệt",
+            benefits = "Dễ mang theo",
+            verifiedFacts = "Dung tích 500 ml"
+        )
+        val friendly = SalesScriptBuilder.build(brief, style = SalesCopyStyle.FRIENDLY, length = SalesCopyLength.SHORT).asText()
+        val premium = SalesScriptBuilder.build(brief, style = SalesCopyStyle.PREMIUM, length = SalesCopyLength.LONG).asText()
+        assertFalse(friendly == premium)
+        assertTrue(premium.contains("Dung tích 500 ml"))
+        assertFalse(premium.contains("giảm 50%"))
+    }
+
     @Test fun usesAudienceAndProblemInHook() {
         val text = SalesScriptBuilder.build(
             SalesProductBrief(productName = "Quạt mini", audience = "người thường xuyên di chuyển", problem = "nóng khi đi ngoài trời")
