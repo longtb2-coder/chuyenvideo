@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ai.longkaka.seller.media.ImportedVideo
+import ai.longkaka.seller.ui.BackgroundScanCard
 import ai.longkaka.seller.media.VideoImportRepository
 import ai.longkaka.seller.media.VideoLibraryRepository
 import ai.longkaka.seller.translation.ChineseOverlayTranslator
@@ -352,6 +353,7 @@ fun SellerDashboard() {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        BackgroundScanCard(videoUri = importedVideo?.let { Uri.parse(it.contentUri) }, category = selectedCategory)
         AppUpdateCard()
         Spacer(Modifier.height(10.dp))
     }
