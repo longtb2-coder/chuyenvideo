@@ -308,6 +308,14 @@ fun SellerDashboard() {
                 }
                 Text(scanStatus, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (workflowMode == SellerWorkflowMode.SHORT_FILM && importedVideo != null && translatedOverlays.isNotEmpty()) {
+                    VideoSubtitleEditor(
+                        videoUri = Uri.parse(importedVideo!!.contentUri),
+                        overlays = translatedOverlays,
+                        editedTexts = editedTranslations,
+                        onTextChange = { index, value -> editedTranslations = editedTranslations + (index to value) }
+                    )
+                }
                 if (workflowMode == SellerWorkflowMode.SALES_VIDEO) {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
