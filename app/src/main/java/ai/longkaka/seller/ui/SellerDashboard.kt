@@ -43,6 +43,8 @@ import ai.longkaka.seller.translation.ChineseOverlayTranslator
 import ai.longkaka.seller.translation.OnScreenText
 import ai.longkaka.seller.translation.ProductCategory
 import ai.longkaka.seller.speech.VieNeuNanoSetupCard
+import ai.longkaka.seller.speech.vieneu.VieNeuChunkTiming
+import java.io.File
 import ai.longkaka.seller.subtitle.VietnameseSubtitleTrack
 import ai.longkaka.seller.sales.SalesProductBrief
 import ai.longkaka.seller.sales.SalesScriptBuilder
@@ -83,6 +85,8 @@ fun SellerDashboard() {
     var productOffer by remember { mutableStateOf("") }
     var salesCallToAction by remember { mutableStateOf("") }
     var generatedSalesScript by remember { mutableStateOf("") }
+    var narrationFile by remember { mutableStateOf<File?>(null) }
+    var narrationTimings by remember { mutableStateOf<List<VieNeuChunkTiming>>(emptyList()) }
     var salesCopyStyle by remember { mutableStateOf(SalesCopyStyle.FRIENDLY) }
     var salesCopyLength by remember { mutableStateOf(SalesCopyLength.STANDARD) }
 
@@ -318,7 +322,9 @@ fun SellerDashboard() {
                         overlays = translatedOverlays,
                         editedTexts = editedTranslations,
                         onTextChange = { index, value -> editedTranslations = editedTranslations + (index to value) },
-                        salesEditing = workflowMode == SellerWorkflowMode.SALES_VIDEO
+                        salesEditing = workflowMode == SellerWorkflowMode.SALES_VIDEO,
+                        narrationFile = if (workflowMode == SellerWorkflowMode.SALES_VIDEO) narrationFile else null,
+                        narrationTimings = if (workflowMode == SellerWorkflowMode.SALES_VIDEO) narrationTimings else emptyList()
                     )
                 }
                 if (workflowMode == SellerWorkflowMode.SALES_VIDEO) {
@@ -408,7 +414,8 @@ fun SellerDashboard() {
                 ToolRow(Icons.Rounded.CloudDownload, "Thuyết minh tiếng Việt bằng VieNeu Nano", "Giọng đọc offline, chọn giọng và nghe thử")
                 VieNeuNanoSetupCard(
                     sourceText = if (workflowMode == SellerWorkflowMode.SALES_VIDEO && generatedSalesScript.isNotBlank()) generatedSalesScript else translatedOverlays.mapIndexed { index, item -> editedTranslations[index] ?: item.vietnameseText }
-                        .filter { it.isNotBlank() }.joinToString("\n")
+                        .filter { it.isNotBlank() }.joinToString("\n"),
+                    onNarrationReady = { file, timings -> narrationFile = file; narrationTimings = timings }
                 )
             }
         }
