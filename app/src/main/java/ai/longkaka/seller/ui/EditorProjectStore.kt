@@ -25,7 +25,7 @@ internal data class SavedEditorProject(
 internal class EditorProjectStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("editor_projects_v1", Context.MODE_PRIVATE)
 
-    fun load(uri: Uri, count: Int, defaults: List<SavedLayerBox>): SavedEditorProject? {
+    fun load(uri: Uri, count: Int, translationDefaults: List<SavedLayerBox>, coverDefaults: List<SavedLayerBox>): SavedEditorProject? {
         val raw = prefs.getString(key(uri), null) ?: return null
         return runCatching {
             val root = JSONObject(raw)
@@ -54,8 +54,8 @@ internal class EditorProjectStore(context: Context) {
                 }
             }
             SavedEditorProject(
-                boxes("translations", defaults),
-                boxes("covers", defaults),
+                boxes("translations", translationDefaults),
+                boxes("covers", coverDefaults),
                 enabled,
                 root.optInt("color", 0xFF111111.toInt()),
                 root.optDouble("alpha", 1.0).toFloat().coerceIn(0f, 1f),
