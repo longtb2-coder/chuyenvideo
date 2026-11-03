@@ -139,7 +139,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     Text("Màu nền khung che")
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         listOf(0xFF111111.toInt(),0xFFFFFFFF.toInt(),0xFF777777.toInt(),0xFFB58A55.toInt()).forEach { color ->
-                            Surface(Modifier.size(34.dp),shape=RoundedCornerShape(8.dp),color=Color(color),
+                            Surface(modifier=Modifier.size(34.dp),shape=RoundedCornerShape(8.dp),color=Color(color),
                                 border=androidx.compose.foundation.BorderStroke(1.dp,MaterialTheme.colorScheme.outline),onClick={coverColor=color}) {}
                         }
                     }
