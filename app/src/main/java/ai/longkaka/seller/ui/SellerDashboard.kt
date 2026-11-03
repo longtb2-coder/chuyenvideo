@@ -313,7 +313,8 @@ fun SellerDashboard() {
                         videoUri = Uri.parse(importedVideo!!.contentUri),
                         overlays = translatedOverlays,
                         editedTexts = editedTranslations,
-                        onTextChange = { index, value -> editedTranslations = editedTranslations + (index to value) }
+                        onTextChange = { index, value -> editedTranslations = editedTranslations + (index to value) },
+                        salesEditing = workflowMode == SellerWorkflowMode.SALES_VIDEO
                     )
                 }
                 if (workflowMode == SellerWorkflowMode.SALES_VIDEO) {
