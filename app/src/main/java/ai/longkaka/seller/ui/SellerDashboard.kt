@@ -44,7 +44,6 @@ import ai.longkaka.seller.media.VideoLibraryRepository
 import ai.longkaka.seller.translation.ChineseOverlayTranslator
 import ai.longkaka.seller.translation.OnScreenText
 import ai.longkaka.seller.translation.ProductCategory
-import ai.longkaka.seller.processing.TextRegionInpainting
 import ai.longkaka.seller.processing.VideoFrameRepairPreview
 import ai.longkaka.seller.processing.TextRemovalPlanner
 import kotlinx.coroutines.Dispatchers
@@ -316,7 +315,7 @@ fun SellerDashboard() {
                                         }
                                         repairPreview?.recycle()
                                         repairPreview = bitmap
-                                        repairStatus = "Đã xem trước ${activeItems.size} vùng đang xuất hiện tại mốc này. Đây chưa phải xử lý toàn video."
+                                        repairStatus = "Đã xem trước ${previewRegions.size} vùng đang xuất hiện tại mốc này. Đây chưa phải xử lý toàn video."
                                     } catch (error: Throwable) {
                                         repairStatus = error.message ?: "Không thể phục hồi khung hình này."
                                     } finally {
