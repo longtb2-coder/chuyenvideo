@@ -78,7 +78,7 @@ object SalesScriptBuilder {
             if (facts.isNotEmpty()) {
                 add("Thông tin đã nhận diện hoặc được cung cấp: " + facts.joinToString("; ") + ".")
             } else {
-                add("Mình chưa có thông số được xác minh, vì vậy bạn nên kiểm tra chất liệu, kích thước và xuất xứ trước khi đặt mua.")
+                add("Hiện chưa có thông số đã xác minh; bạn nên kiểm tra chất liệu, kích thước và xuất xứ trước khi đặt mua.")
             }
             if (offer.isNotBlank()) add("Thông tin giá và ưu đãi bạn cung cấp: $offer. Bạn nên xác nhận lại tình trạng áp dụng trước khi thanh toán.")
             else add("Giá bán và ưu đãi có thể thay đổi; hãy kiểm tra giá hiện tại tại nơi bán.")
