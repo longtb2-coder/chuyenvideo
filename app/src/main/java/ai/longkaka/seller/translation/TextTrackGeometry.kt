@@ -1,7 +1,7 @@
 package ai.longkaka.seller.translation
 
 /** Interpolates OCR box motion between neighboring sampled observations. */
-fun OnScreenText.boundsAt(timeMs: Long): TextRegionObservation? {
+fun OnScreenText.boundsAt(timeMs: Long, maxGapMs: Long = 3_000L): TextRegionObservation? {
     val points = observations.sortedBy { it.timeMs }
     if (points.isEmpty() || timeMs < points.first().timeMs || timeMs > points.last().timeMs) return null
     val exact = points.firstOrNull { it.timeMs == timeMs }
@@ -9,7 +9,7 @@ fun OnScreenText.boundsAt(timeMs: Long): TextRegionObservation? {
     val before = points.lastOrNull { it.timeMs < timeMs } ?: return null
     val after = points.firstOrNull { it.timeMs > timeMs } ?: return null
     val span = after.timeMs - before.timeMs
-    if (span <= 0L) return before
+    if (span <= 0L || span > maxGapMs) return null
     val ratio = (timeMs - before.timeMs).toFloat() / span.toFloat()
     fun mix(a: Float, b: Float) = a + (b - a) * ratio
     return TextRegionObservation(
