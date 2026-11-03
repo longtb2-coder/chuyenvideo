@@ -108,12 +108,12 @@ class ChineseOverlayTranslator(private val context: Context) {
                 }
                 try {
                     val result = recognizer.process(InputImage.fromBitmap(bitmap, 0)).awaitTask()
-                    result.textBlocks.forEach { block ->
-                        val text = block.text.trim()
+                    result.textBlocks.flatMap { it.lines }.forEach { line ->
+                        val text = line.text.trim()
                         val containsChinese = text.any {
                             it.code in 0x3400..0x9FFF || it.code in 0xF900..0xFAFF
                         }
-                        val box = block.boundingBox
+                        val box = line.boundingBox
                         if (containsChinese && box != null) {
                             val left = (box.left.toFloat() / bitmap.width).coerceIn(0f, 1f)
                             val top = (box.top.toFloat() / bitmap.height).coerceIn(0f, 1f)
