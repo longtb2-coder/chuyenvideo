@@ -26,7 +26,10 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
-fun VieNeuNanoSetupCard(sourceText: String) {
+fun VieNeuNanoSetupCard(
+    sourceText: String,
+    onNarrationReady: (File, List<VieNeuChunkTiming>) -> Unit = { _, _ -> }
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var engine by remember { mutableStateOf<VieNeuNanoEngine?>(null) }
@@ -100,7 +103,7 @@ fun VieNeuNanoSetupCard(sourceText: String) {
                         status = "Đang tạo giọng $selectedVoice…"
                         scope.launch {
                             try {
-                                val file = withContext(Dispatchers.IO) {
+                                val generated = withContext(Dispatchers.IO) {
                                     val folder = File(context.getExternalFilesDir(null), "LONGKAKA SELLER AI/audio")
                                     check(folder.exists() || folder.mkdirs()) { "Không tạo được thư mục âm thanh." }
                                     val timings = mutableListOf<VieNeuChunkTiming>()
@@ -119,10 +122,12 @@ fun VieNeuNanoSetupCard(sourceText: String) {
                                         "${index + 1}\n${fmt(start)} --> ${fmt(end)}\n${cue.text}\n"
                                     }.joinToString("\n")
                                     File(folder, "vieneu_nano_preview.srt").writeText(srt, Charsets.UTF_8)
-                                    wav
+                                    wav to timings.toList()
                                 }
+                                val file = generated.first
                                 output = file
-                                chunkTimings = emptyList()
+                                chunkTimings = generated.second
+                                onNarrationReady(file, generated.second)
                                 player?.release()
                                 player = MediaPlayer().apply {
                                     setDataSource(file.absolutePath)
