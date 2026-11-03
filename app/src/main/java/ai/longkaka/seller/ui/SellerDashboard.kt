@@ -3,7 +3,6 @@ package ai.longkaka.seller.ui
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,7 +25,6 @@ import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -35,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ai.longkaka.seller.media.ImportedVideo
@@ -45,14 +42,10 @@ import ai.longkaka.seller.media.VideoLibraryRepository
 import ai.longkaka.seller.translation.ChineseOverlayTranslator
 import ai.longkaka.seller.translation.OnScreenText
 import ai.longkaka.seller.translation.ProductCategory
-import ai.longkaka.seller.processing.VideoFrameRepairPreview
-import ai.longkaka.seller.processing.TextRemovalPlanner
 import ai.longkaka.seller.speech.VieNeuNanoSetupCard
 import ai.longkaka.seller.subtitle.VietnameseSubtitleTrack
 import ai.longkaka.seller.sales.SalesProductBrief
 import ai.longkaka.seller.sales.SalesScriptBuilder
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -69,13 +62,9 @@ fun SellerDashboard() {
     var translatedOverlays by remember { mutableStateOf<List<OnScreenText>>(emptyList()) }
     var editedTranslations by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
     var selectedCategory by remember { mutableStateOf(ProductCategory.AUTO) }
-    var selectedRemovalIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var scanStatus by remember { mutableStateOf("Chưa quét chữ trên hình.") }
     var scanProgress by remember { mutableIntStateOf(0) }
     var isScanning by remember { mutableStateOf(false) }
-    var repairPreview by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var repairStatus by remember { mutableStateOf("Chưa tạo bản xem trước phục hồi.") }
-    var isRepairing by remember { mutableStateOf(false) }
     var videoLibrary by remember { mutableStateOf<List<ImportedVideo>>(emptyList()) }
     var sourceUrl by remember { mutableStateOf("") }
     var importedVideo by remember { mutableStateOf<ImportedVideo?>(null) }
@@ -292,7 +281,6 @@ fun SellerDashboard() {
                                 scanStatus = "Đang quét chữ Trung trên các khung hình…"
                                 translatedOverlays = emptyList()
                                 editedTranslations = emptyMap()
-                                selectedRemovalIndices = emptySet()
                                 try {
                                     translatedOverlays = overlayTranslator.scanAndTranslate(
                                         Uri.parse(video.contentUri),
@@ -354,15 +342,6 @@ fun SellerDashboard() {
                             Text("Vùng chữ ${index + 1} • ${formatDuration(item.timeMs)} – ${formatDuration(item.lastTimeMs)}",
                                 style = MaterialTheme.typography.labelSmall)
                             Text("Gốc: ${item.sourceText}", style = MaterialTheme.typography.bodySmall)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(
-                                    checked = index in selectedRemovalIndices,
-                                    onCheckedChange = { checked ->
-                                        selectedRemovalIndices = if (checked) selectedRemovalIndices + index else selectedRemovalIndices - index
-                                    }
-                                )
-                                Text("Chọn vùng này để thử làm sạch chữ", style = MaterialTheme.typography.bodySmall)
-                            }
                             OutlinedTextField(
                                 value = editedTranslations[index] ?: item.vietnameseText,
                                 onValueChange = { value -> editedTranslations = editedTranslations + (index to value) },
@@ -390,44 +369,6 @@ fun SellerDashboard() {
                     ) { Text("XUẤT PHỤ ĐỀ TIẾNG VIỆT (.SRT)") }
                     Text(subtitleExportStatus, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Chỉ chọn những chữ phủ do video thêm vào. Không chọn logo, nhãn hiệu, thông số in trên bao bì nếu muốn giữ nguyên.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedButton(
-                        onClick = {
-                            val video = importedVideo
-                            val selectedItems = selectedRemovalIndices.sorted().mapNotNull { translatedOverlays.getOrNull(it) }
-                            val previewTimeMs = selectedItems.firstOrNull()?.timeMs
-                            // Build masks from the selected tracks at this exact timestamp.
-                            val previewRegions = if (previewTimeMs == null) emptyList() else {
-                                TextRemovalPlanner.regionsAt(translatedOverlays, selectedRemovalIndices, previewTimeMs)
-                            }
-                            if (video != null && previewTimeMs != null && previewRegions.isNotEmpty() && !isRepairing) {
-                                scope.launch {
-                                    isRepairing = true
-                                    repairStatus = "Đang phục hồi ${previewRegions.size} vùng chữ tại ${formatDuration(previewTimeMs)}…"
-                                    try {
-                                        val bitmap = withContext(Dispatchers.Default) {
-                                            VideoFrameRepairPreview.create(context, Uri.parse(video.contentUri), previewTimeMs, previewRegions)
-                                        }
-                                        repairPreview?.recycle()
-                                        repairPreview = bitmap
-                                        repairStatus = "Đã xem trước ${previewRegions.size} vùng đang xuất hiện tại mốc này. Đây chưa phải xử lý toàn video."
-                                    } catch (error: Throwable) {
-                                        repairStatus = error.message ?: "Không thể phục hồi khung hình này."
-                                    } finally {
-                                        isRepairing = false
-                                    }
-                                }
-                            }
-                        },
-                        enabled = !isRepairing && importedVideo != null && selectedRemovalIndices.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text(if (isRepairing) "ĐANG PHỤC HỒI KHUNG HÌNH…" else "THỬ XÓA VÙNG ĐÃ CHỌN TRÊN 1 KHUNG HÌNH") }
-                    Text(repairStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    repairPreview?.let { bitmap ->
-                        Image(bitmap.asImageBitmap(), contentDescription = "Khung hình sau phục hồi chữ",
-                            modifier = Modifier.fillMaxWidth().height(220.dp))
-                    }
                 }
                 ToolRow(Icons.Rounded.AutoAwesome,
                     if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Xóa chữ Trung / làm mờ đúng vùng chữ" else "Phân tích lợi ích, điểm khác biệt và khách hàng mục tiêu",
