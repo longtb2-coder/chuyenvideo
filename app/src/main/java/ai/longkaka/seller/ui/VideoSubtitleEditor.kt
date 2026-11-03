@@ -25,6 +25,8 @@ import androidx.media3.ui.PlayerView
 import ai.longkaka.seller.translation.OnScreenText
 import ai.longkaka.seller.media.VideoExporter
 import ai.longkaka.seller.media.RenderBox
+import ai.longkaka.seller.speech.vieneu.VieNeuChunkTiming
+import java.io.File
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -33,7 +35,7 @@ private enum class EditorLayer { TRANSLATION, COVER }
 private data class EditableOverlay(val left: Float, val top: Float, val width: Float, val height: Float)
 
 @Composable
-fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts: Map<Int, String>, onTextChange: (Int, String) -> Unit, salesEditing: Boolean = false) {
+fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts: Map<Int, String>, onTextChange: (Int, String) -> Unit, salesEditing: Boolean = false, narrationFile: File? = null, narrationTimings: List<VieNeuChunkTiming> = emptyList()) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isExporting by remember { mutableStateOf(false) }
@@ -78,6 +80,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     Card(shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Text(if (salesEditing) "BIÊN TẬP VIDEO BÁN HÀNG" else "DỊCH PHIM & CHỈNH SỬA PHỤ ĐỀ", style = MaterialTheme.typography.titleMedium)
+            if (salesEditing) Text(if (narrationFile != null) "Đã nhận giọng đọc VieNeu: ${narrationFile.name} • ${narrationTimings.size} đoạn căn thời gian." else "Chưa có giọng đọc bán hàng. Hãy tạo giọng VieNeu trước khi xuất video.", style = MaterialTheme.typography.bodySmall)
             Text(if (salesEditing) "Chỉnh nội dung, vị trí và lớp che trong video bán hàng." else "Chỉ sửa bản dịch tiếng Việt và vị trí phụ đề; không thêm nội dung quảng cáo hay thay đổi video gốc.", style = MaterialTheme.typography.bodySmall)
             BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(16f/9f).background(Color.Black, RoundedCornerShape(10.dp))) {
                 val bw = constraints.maxWidth.toFloat()
