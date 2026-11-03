@@ -352,6 +352,7 @@ fun SellerDashboard() {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        AppUpdateCard()
         Spacer(Modifier.height(10.dp))
     }
 }
