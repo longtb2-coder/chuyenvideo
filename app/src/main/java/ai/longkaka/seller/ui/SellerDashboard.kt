@@ -49,6 +49,8 @@ import ai.longkaka.seller.processing.VideoFrameRepairPreview
 import ai.longkaka.seller.processing.TextRemovalPlanner
 import ai.longkaka.seller.speech.VieNeuNanoSetupCard
 import ai.longkaka.seller.subtitle.VietnameseSubtitleTrack
+import ai.longkaka.seller.sales.SalesProductBrief
+import ai.longkaka.seller.sales.SalesScriptBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -82,6 +84,14 @@ fun SellerDashboard() {
     var isImporting by remember { mutableStateOf(false) }
     var pendingSubtitleText by remember { mutableStateOf("") }
     var subtitleExportStatus by remember { mutableStateOf("Chưa xuất phụ đề.") }
+    var productName by remember { mutableStateOf("") }
+    var targetCustomer by remember { mutableStateOf("") }
+    var customerProblem by remember { mutableStateOf("") }
+    var productBenefits by remember { mutableStateOf("") }
+    var verifiedProductFacts by remember { mutableStateOf("") }
+    var productOffer by remember { mutableStateOf("") }
+    var salesCallToAction by remember { mutableStateOf("") }
+    var generatedSalesScript by remember { mutableStateOf("") }
 
     val subtitleSaver = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/x-subrip")
@@ -310,6 +320,34 @@ fun SellerDashboard() {
                 }
                 Text(scanStatus, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (workflowMode == SellerWorkflowMode.SALES_VIDEO) {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("TRỢ LÝ KỊCH BẢN BÁN HÀNG (OFFLINE)", style = MaterialTheme.typography.titleSmall)
+                            Text("Nhập dữ kiện có thật. Chữ OCR được đưa vào để tham khảo; ứng dụng không tự bịa giá hoặc thông số.", style = MaterialTheme.typography.bodySmall)
+                            OutlinedTextField(productName, { productName = it }, Modifier.fillMaxWidth(), label = { Text("Tên sản phẩm / mã hàng") })
+                            OutlinedTextField(targetCustomer, { targetCustomer = it }, Modifier.fillMaxWidth(), label = { Text("Khách hàng mục tiêu") })
+                            OutlinedTextField(customerProblem, { customerProblem = it }, Modifier.fillMaxWidth(), label = { Text("Vấn đề khách hàng đang gặp") })
+                            OutlinedTextField(productBenefits, { productBenefits = it }, Modifier.fillMaxWidth(), label = { Text("Lợi ích đã xác nhận") })
+                            OutlinedTextField(verifiedProductFacts, { verifiedProductFacts = it }, Modifier.fillMaxWidth(), label = { Text("Thông số / chất liệu / xuất xứ đã kiểm chứng") })
+                            OutlinedTextField(productOffer, { productOffer = it }, Modifier.fillMaxWidth(), label = { Text("Giá và ưu đãi (nếu có)") })
+                            OutlinedTextField(salesCallToAction, { salesCallToAction = it }, Modifier.fillMaxWidth(), label = { Text("Lời kêu gọi hành động") })
+                            Button(onClick = {
+                                generatedSalesScript = SalesScriptBuilder.build(
+                                    SalesProductBrief(productName, targetCustomer, customerProblem, productBenefits, verifiedProductFacts, productOffer, salesCallToAction),
+                                    translatedOverlays.map { it.sourceText + " → " + it.vietnameseText }
+                                ).asText()
+                            }, modifier = Modifier.fillMaxWidth()) { Text("TẠO KỊCH BẢN BÁN HÀNG") }
+                            if (generatedSalesScript.isNotBlank()) {
+                                OutlinedTextField(generatedSalesScript, { generatedSalesScript = it }, Modifier.fillMaxWidth(), label = { Text("Kịch bản có thể chỉnh sửa") }, minLines = 7)
+                                OutlinedButton(onClick = {
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Kịch bản bán hàng", generatedSalesScript))
+                                }, modifier = Modifier.fillMaxWidth()) { Text("SAO CHÉP TOÀN BỘ KỊCH BẢN") }
+                            }
+                        }
+                    }
+                }
                 translatedOverlays.forEachIndexed { index, item ->
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
