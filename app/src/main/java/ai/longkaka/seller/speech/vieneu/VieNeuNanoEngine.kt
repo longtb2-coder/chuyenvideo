@@ -21,7 +21,7 @@ import kotlin.math.roundToInt
  * Direct Kotlin/ONNX implementation of the pinned VieNeu v3 Nano reference path.
  * It is deliberately separate from Android's existing Offline TTS engine.
  */
-internal data class VieNeuChunkTiming(val text: String, val startMs: Long, val endMs: Long)
+data class VieNeuChunkTiming(val text: String, val startMs: Long, val endMs: Long)
 
 internal class VieNeuNanoEngine(
     modelDirectory: File,
