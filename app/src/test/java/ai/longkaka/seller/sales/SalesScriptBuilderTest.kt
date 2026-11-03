@@ -8,8 +8,8 @@ class SalesScriptBuilderTest {
     @Test fun doesNotInventPriceOrSpecsWhenMissing() {
         val text = SalesScriptBuilder.build(SalesProductBrief(productName = "Áo khoác"))
             .asText()
-        assertTrue(text.contains("chưa có thông số đã xác minh"))
-        assertTrue(text.contains("kiểm tra tại nơi bán"))
+        assertTrue(text.contains("chưa có thông số được xác minh"))
+        assertTrue(text.contains("kiểm tra giá hiện tại tại nơi bán"))
         assertFalse(text.contains("299.000"))
     }
 
