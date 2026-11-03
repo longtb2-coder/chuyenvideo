@@ -122,7 +122,7 @@ fun VieNeuNanoSetupCard(
                                         "${index + 1}\n${fmt(start)} --> ${fmt(end)}\n${cue.text}\n"
                                     }.joinToString("\n")
                                     File(folder, "${wav.nameWithoutExtension}.srt").writeText(srt, Charsets.UTF_8)
-                                    wav to timings.toList() to timings.toList()
+                                    wav to timings.toList()
                                 }
                                 val file = generated.first
                                 output = file
