@@ -23,7 +23,7 @@ class TextRemovalPlannerTest {
         val regions = TextRemovalPlanner.regionsAt(tracks, setOf(0, 1), 1_000L)
         assertEquals(1, regions.size)
         assertEquals(0.2f, regions.single().left, 0.0001f)
-        assertEquals(0.2f, regions.single().right, 0.0001f)
+        assertEquals(0.3f, regions.single().right, 0.0001f)
     }
 
     @Test
