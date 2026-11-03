@@ -24,6 +24,14 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.hypot
 
+data class TextRegionObservation(
+    val timeMs: Long,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+)
+
 data class OnScreenText(
     val sourceText: String,
     val vietnameseText: String,
@@ -32,7 +40,9 @@ data class OnScreenText(
     val left: Float,
     val top: Float,
     val right: Float,
-    val bottom: Float
+    val bottom: Float,
+    /** Per-sample boxes retained for future frame-by-frame removal and motion tracking. */
+    val observations: List<TextRegionObservation> = emptyList()
 )
 
 /**
@@ -49,7 +59,8 @@ class ChineseOverlayTranslator(private val context: Context) {
         var left: Float,
         var top: Float,
         var right: Float,
-        var bottom: Float
+        var bottom: Float,
+        val observations: MutableList<TextRegionObservation> = mutableListOf()
     ) {
         val centerX: Float get() = (left + right) / 2f
         val centerY: Float get() = (top + bottom) / 2f
@@ -131,7 +142,8 @@ class ChineseOverlayTranslator(private val context: Context) {
                                     left = left,
                                     top = top,
                                     right = right,
-                                    bottom = bottom
+                                    bottom = bottom,
+                                    observations = mutableListOf(TextRegionObservation(timeMs, left, top, right, bottom))
                                 )
                             } else {
                                 candidate.lastTimeMs = timeMs
@@ -139,6 +151,7 @@ class ChineseOverlayTranslator(private val context: Context) {
                                 candidate.top = minOf(candidate.top, top)
                                 candidate.right = maxOf(candidate.right, right)
                                 candidate.bottom = maxOf(candidate.bottom, bottom)
+                                candidate.observations += TextRegionObservation(timeMs, left, top, right, bottom)
                                 if (text.length > candidate.displayText.length) candidate.displayText = text
                             }
                         }
@@ -161,7 +174,8 @@ class ChineseOverlayTranslator(private val context: Context) {
                     left = track.left,
                     top = track.top,
                     right = track.right,
-                    bottom = track.bottom
+                    bottom = track.bottom,
+                    observations = track.observations.toList()
                 )
             }
         } finally {
