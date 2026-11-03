@@ -32,10 +32,10 @@ private data class EditableOverlay(val left: Float, val top: Float, val width: F
 @Composable
 fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts: Map<Int, String>, onTextChange: (Int, String) -> Unit) {
     val context = LocalContext.current
-    val player = remember(videoUri) {
+    val exoPlayer = remember(videoUri) {
         ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(videoUri)); prepare(); playWhenReady = false }
     }
-    DisposableEffect(player) { onDispose { player.release() } }
+    DisposableEffect(exoPlayer) { onDispose { exoPlayer.release() } }
     var selected by remember(overlays) { mutableIntStateOf(0) }
     var layer by remember { mutableStateOf(EditorLayer.TRANSLATION) }
     var positionMs by remember { mutableLongStateOf(0L) }
@@ -47,14 +47,14 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     var coverAlpha by remember { mutableFloatStateOf(1f) }
     var textSize by remember { mutableFloatStateOf(16f) }
 
-    LaunchedEffect(player) {
+    LaunchedEffect(exoPlayer) {
         while (true) {
-            positionMs = player.currentPosition.coerceAtLeast(0L)
-            durationMs = player.duration.takeIf { it > 0L } ?: 0L
+            positionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+            durationMs = exoPlayer.duration.takeIf { it > 0L } ?: 0L
             delay(250)
         }
     }
-    LaunchedEffect(selected, overlays) { overlays.getOrNull(selected)?.let { player.seekTo(it.timeMs.coerceAtLeast(0L)) } }
+    LaunchedEffect(selected, overlays) { overlays.getOrNull(selected)?.let { exoPlayer.seekTo(it.timeMs.coerceAtLeast(0L)) } }
 
     Card(shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -63,8 +63,8 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
             BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(16f/9f).background(Color.Black, RoundedCornerShape(10.dp))) {
                 val bw = constraints.maxWidth.toFloat()
                 val bh = constraints.maxHeight.toFloat()
-                AndroidView(factory = { c -> PlayerView(c).apply { player = this@VideoSubtitleEditor.player; useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT } },
-                    update = { it.player = player }, modifier = Modifier.fillMaxSize())
+                AndroidView(factory = { c -> PlayerView(c).apply { player = exoPlayer; useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT } },
+                    update = { it.player = exoPlayer }, modifier = Modifier.fillMaxSize())
                 if (selected in overlays.indices) {
                     val cover = covers[selected]
                     if (coverEnabled[selected]) {
@@ -89,16 +89,16 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 }
             }
             Row(verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                Button(onClick={ if(player.isPlaying) player.pause() else player.play() }) { Text(if(player.isPlaying) "TẠM DỪNG" else "PHÁT") }
+                Button(onClick={ if(exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() }) { Text(if(exoPlayer.isPlaying) "TẠM DỪNG" else "PHÁT") }
                 Text("${clock(positionMs)} / ${clock(durationMs)}", style=MaterialTheme.typography.labelMedium)
             }
             Slider(value=if(durationMs>0) positionMs.toFloat().coerceIn(0f,durationMs.toFloat()) else 0f,
-                onValueChange={ positionMs=it.toLong(); player.seekTo(positionMs) }, valueRange=0f..durationMs.coerceAtLeast(1L).toFloat())
+                onValueChange={ positionMs=it.toLong(); exoPlayer.seekTo(positionMs) }, valueRange=0f..durationMs.coerceAtLeast(1L).toFloat())
             if (overlays.isNotEmpty()) {
                 Text("CÁC ĐOẠN CHỮ ĐÃ NHẬN DIỆN", style=MaterialTheme.typography.labelLarge)
                 Column(Modifier.heightIn(max=160.dp).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(4.dp)) {
                     overlays.forEachIndexed { index, item ->
-                        OutlinedButton(onClick={ selected=index; player.seekTo(item.timeMs) }, modifier=Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick={ selected=index; exoPlayer.seekTo(item.timeMs) }, modifier=Modifier.fillMaxWidth()) {
                             Column(Modifier.fillMaxWidth()) {
                                 Text("Đoạn ${index+1} • ${clock(item.timeMs)}–${clock(item.lastTimeMs)}")
                                 Text(item.sourceText, style=MaterialTheme.typography.bodySmall, maxLines=1)
