@@ -11,14 +11,12 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.Data
-import ai.longkaka.seller.R
 import ai.longkaka.seller.translation.ChineseOverlayTranslator
 import ai.longkaka.seller.translation.ProductCategory
 import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.util.UUID
 
 /**
  * Foreground, resumable OCR + Chinese-to-Vietnamese translation job.
@@ -93,7 +91,7 @@ class MediaWorkRequest(
         return File(directory, "scan_${id}.json").apply { writeText(array.toString(), Charsets.UTF_8) }
     }
 
-    private suspend fun createForegroundInfo(progress: Int, message: String): ForegroundInfo {
+    private fun createForegroundInfo(progress: Int, message: String): ForegroundInfo {
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
