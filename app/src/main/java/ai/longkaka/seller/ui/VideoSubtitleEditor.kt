@@ -33,7 +33,7 @@ private enum class EditorLayer { TRANSLATION, COVER }
 private data class EditableOverlay(val left: Float, val top: Float, val width: Float, val height: Float)
 
 @Composable
-fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts: Map<Int, String>, onTextChange: (Int, String) -> Unit) {
+fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts: Map<Int, String>, onTextChange: (Int, String) -> Unit, salesEditing: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isExporting by remember { mutableStateOf(false) }
@@ -58,7 +58,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     var coverAlpha by remember { mutableFloatStateOf(savedProject?.coverAlpha ?: 1f) }
     var textSize by remember { mutableFloatStateOf(savedProject?.textSize ?: 16f) }
 
-    LaunchedEffect(videoUri, translations, covers, coverEnabled, coverColor, coverAlpha, textSize, editedTexts) {
+    LaunchedEffect(videoUri, translations, covers, if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts) {
         projectStore.save(videoUri, SavedEditorProject(
             translations.map { SavedLayerBox(it.left,it.top,it.width,it.height) },
             covers.map { SavedLayerBox(it.left,it.top,it.width,it.height) },
@@ -77,8 +77,8 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
 
     Card(shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Text("04 • XEM TRƯỚC & CHỈNH SỬA VIDEO", style = MaterialTheme.typography.titleMedium)
-            Text("Chọn đoạn chữ để nhảy đến đúng thời điểm. Chạm lớp muốn sửa rồi kéo trực tiếp trên video.", style = MaterialTheme.typography.bodySmall)
+            Text(if (salesEditing) "BIÊN TẬP VIDEO BÁN HÀNG" else "DỊCH PHIM & CHỈNH SỬA PHỤ ĐỀ", style = MaterialTheme.typography.titleMedium)
+            Text(if (salesEditing) "Chỉnh nội dung, vị trí và lớp che trong video bán hàng." else "Chỉ sửa bản dịch tiếng Việt và vị trí phụ đề; không thêm nội dung quảng cáo hay thay đổi video gốc.", style = MaterialTheme.typography.bodySmall)
             BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(16f/9f).background(Color.Black, RoundedCornerShape(10.dp))) {
                 val bw = constraints.maxWidth.toFloat()
                 val bh = constraints.maxHeight.toFloat()
