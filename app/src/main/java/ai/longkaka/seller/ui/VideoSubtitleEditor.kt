@@ -23,6 +23,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import ai.longkaka.seller.translation.OnScreenText
+import ai.longkaka.seller.media.VideoExporter
+import ai.longkaka.seller.media.RenderBox
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -32,6 +35,10 @@ private data class EditableOverlay(val left: Float, val top: Float, val width: F
 @Composable
 fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts: Map<Int, String>, onTextChange: (Int, String) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isExporting by remember { mutableStateOf(false) }
+    var exportStatus by remember { mutableStateOf("Chưa xuất video.") }
+    val exporter = remember(context) { VideoExporter(context.applicationContext) }
     val exoPlayer = remember(videoUri) {
         ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(videoUri)); prepare(); playWhenReady = false }
     }
@@ -109,6 +116,25 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
             }
             Slider(value=if(durationMs>0) positionMs.toFloat().coerceIn(0f,durationMs.toFloat()) else 0f,
                 onValueChange={ positionMs=it.toLong(); exoPlayer.seekTo(positionMs) }, valueRange=0f..durationMs.coerceAtLeast(1L).toFloat())
+            Button(onClick = {
+                if (!isExporting && overlays.isNotEmpty()) {
+                    isExporting = true
+                    exportStatus = "Đang kết xuất MP4…"
+                    scope.launch {
+                        runCatching {
+                            exporter.export(videoUri, overlays,
+                                translations.map { RenderBox(it.left,it.top,it.width,it.height) },
+                                covers.map { RenderBox(it.left,it.top,it.width,it.height) },
+                                coverEnabled, coverColor, coverAlpha, textSize, editedTexts)
+                        }.onSuccess { exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI" }
+                         .onFailure { exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định") }
+                        isExporting = false
+                    }
+                }
+            }, enabled = !isExporting && overlays.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
+                Text(if (isExporting) "ĐANG XUẤT VIDEO…" else "XUẤT VIDEO MP4 ĐÃ CHỈNH SỬA")
+            }
+            Text(exportStatus, style = MaterialTheme.typography.bodySmall)
             if (overlays.isNotEmpty()) {
                 Text("CÁC ĐOẠN CHỮ ĐÃ NHẬN DIỆN", style=MaterialTheme.typography.labelLarge)
                 Column(Modifier.heightIn(max=160.dp).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(4.dp)) {
