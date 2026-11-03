@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ai.longkaka.seller.speech.vieneu.VieNeuNanoEngine
 import ai.longkaka.seller.speech.vieneu.VieNeuNanoModelStore
+import ai.longkaka.seller.speech.vieneu.VieNeuChunkTiming
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -36,6 +37,7 @@ fun VieNeuNanoSetupCard(sourceText: String) {
     var progress by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf(if (VieNeuNanoModelStore.hasDownloadedFiles(context)) "Đã có dữ liệu VieNeu Nano. Nhấn khởi tạo để dùng offline." else "Tải mô hình VieNeu Nano miễn phí lần đầu, sau đó dùng offline.") }
     var output by remember { mutableStateOf<File?>(null) }
+    var chunkTimings by remember { mutableStateOf<List<VieNeuChunkTiming>>(emptyList()) }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
 
     DisposableEffect(Unit) {
@@ -101,9 +103,26 @@ fun VieNeuNanoSetupCard(sourceText: String) {
                                 val file = withContext(Dispatchers.IO) {
                                     val folder = File(context.getExternalFilesDir(null), "LONGKAKA SELLER AI/audio")
                                     check(folder.exists() || folder.mkdirs()) { "Không tạo được thư mục âm thanh." }
-                                    active.synthesizeToWav(text, selectedVoice, File(folder, "vieneu_nano_preview.wav"), steps = 8)
+                                    val timings = mutableListOf<VieNeuChunkTiming>()
+                                    val wav = active.synthesizeToWav(
+                                        text, selectedVoice, File(folder, "vieneu_nano_preview.wav"), steps = 8,
+                                        onChunkTiming = { timings += it }
+                                    )
+                                    val srt = timings.mapIndexed { index, cue ->
+                                        val start = cue.startMs.coerceAtLeast(0L)
+                                        val end = cue.endMs.coerceAtLeast(start + 1L)
+                                        val fmt: (Long) -> String = { ms ->
+                                            val h = ms / 3_600_000L; val m = (ms % 3_600_000L) / 60_000L
+                                            val s = (ms % 60_000L) / 1_000L; val milli = ms % 1_000L
+                                            String.format(java.util.Locale.ROOT, "%02d:%02d:%02d,%03d", h, m, s, milli)
+                                        }
+                                        "${index + 1}\\n${fmt(start)} --> ${fmt(end)}\\n${cue.text}\\n"
+                                    }.joinToString("\\n")
+                                    File(folder, "vieneu_nano_preview.srt").writeText(srt, Charsets.UTF_8)
+                                    wav
                                 }
                                 output = file
+                                chunkTimings = emptyList()
                                 player?.release()
                                 player = MediaPlayer().apply {
                                     setDataSource(file.absolutePath)
