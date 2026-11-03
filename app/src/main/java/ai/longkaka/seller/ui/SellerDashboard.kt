@@ -46,6 +46,8 @@ import ai.longkaka.seller.speech.VieNeuNanoSetupCard
 import ai.longkaka.seller.subtitle.VietnameseSubtitleTrack
 import ai.longkaka.seller.sales.SalesProductBrief
 import ai.longkaka.seller.sales.SalesScriptBuilder
+import ai.longkaka.seller.sales.SalesCopyStyle
+import ai.longkaka.seller.sales.SalesCopyLength
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -81,6 +83,8 @@ fun SellerDashboard() {
     var productOffer by remember { mutableStateOf("") }
     var salesCallToAction by remember { mutableStateOf("") }
     var generatedSalesScript by remember { mutableStateOf("") }
+    var salesCopyStyle by remember { mutableStateOf(SalesCopyStyle.FRIENDLY) }
+    var salesCopyLength by remember { mutableStateOf(SalesCopyLength.STANDARD) }
 
     val subtitleSaver = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/x-subrip")
@@ -320,8 +324,8 @@ fun SellerDashboard() {
                 if (workflowMode == SellerWorkflowMode.SALES_VIDEO) {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("TRỢ LÝ KỊCH BẢN BÁN HÀNG (OFFLINE)", style = MaterialTheme.typography.titleSmall)
-                            Text("Nhập dữ kiện có thật. Chữ OCR được đưa vào để tham khảo; ứng dụng không tự bịa giá hoặc thông số.", style = MaterialTheme.typography.bodySmall)
+                            Text("TRỢ LÝ KỊCH BẢN BÁN HÀNG THÍCH ỨNG", style = MaterialTheme.typography.titleSmall)
+                            Text("Chọn cách nói và thời lượng. Kịch bản ưu tiên dữ kiện đã xác nhận; không tự bịa giá, công dụng hay chứng nhận.", style = MaterialTheme.typography.bodySmall)
                             OutlinedTextField(productName, { productName = it }, Modifier.fillMaxWidth(), label = { Text("Tên sản phẩm / mã hàng") })
                             OutlinedTextField(targetCustomer, { targetCustomer = it }, Modifier.fillMaxWidth(), label = { Text("Khách hàng mục tiêu") })
                             OutlinedTextField(customerProblem, { customerProblem = it }, Modifier.fillMaxWidth(), label = { Text("Vấn đề khách hàng đang gặp") })
@@ -329,10 +333,14 @@ fun SellerDashboard() {
                             OutlinedTextField(verifiedProductFacts, { verifiedProductFacts = it }, Modifier.fillMaxWidth(), label = { Text("Thông số / chất liệu / xuất xứ đã kiểm chứng") })
                             OutlinedTextField(productOffer, { productOffer = it }, Modifier.fillMaxWidth(), label = { Text("Giá và ưu đãi (nếu có)") })
                             OutlinedTextField(salesCallToAction, { salesCallToAction = it }, Modifier.fillMaxWidth(), label = { Text("Lời kêu gọi hành động") })
+                            OutlinedButton(onClick = { val all = SalesCopyStyle.values(); salesCopyStyle = all[(all.indexOf(salesCopyStyle) + 1) % all.size] }, modifier = Modifier.fillMaxWidth()) { Text("CÁCH NÓI: ${salesCopyStyle.label} • CHẠM ĐỂ ĐỔI") }
+                            OutlinedButton(onClick = { val all = SalesCopyLength.values(); salesCopyLength = all[(all.indexOf(salesCopyLength) + 1) % all.size] }, modifier = Modifier.fillMaxWidth()) { Text("THỜI LƯỢNG: ${salesCopyLength.label} • CHẠM ĐỂ ĐỔI") }
                             Button(onClick = {
                                 generatedSalesScript = SalesScriptBuilder.build(
                                     SalesProductBrief(productName, targetCustomer, customerProblem, productBenefits, verifiedProductFacts, productOffer, salesCallToAction),
-                                    translatedOverlays.map { it.sourceText + " → " + it.vietnameseText }
+                                    translatedOverlays.map { it.sourceText + " → " + it.vietnameseText },
+                                    style = salesCopyStyle,
+                                    length = salesCopyLength
                                 ).asText()
                             }, modifier = Modifier.fillMaxWidth()) { Text("TẠO KỊCH BẢN BÁN HÀNG") }
                             if (generatedSalesScript.isNotBlank()) {
@@ -385,7 +393,7 @@ fun SellerDashboard() {
                 ToolRow(Icons.Rounded.Subtitles, if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Phụ đề tiếng Việt theo vị trí chữ gốc" else "Phụ đề, điểm nổi bật và lời kêu gọi mua hàng", "Căn thời gian và cho phép chỉnh sửa")
                 ToolRow(Icons.Rounded.CloudDownload, "Thuyết minh tiếng Việt bằng VieNeu Nano", "Giọng đọc offline, chọn giọng và nghe thử")
                 VieNeuNanoSetupCard(
-                    sourceText = translatedOverlays.mapIndexed { index, item -> editedTranslations[index] ?: item.vietnameseText }
+                    sourceText = if (workflowMode == SellerWorkflowMode.SALES_VIDEO && generatedSalesScript.isNotBlank()) generatedSalesScript else translatedOverlays.mapIndexed { index, item -> editedTranslations[index] ?: item.vietnameseText }
                         .filter { it.isNotBlank() }.joinToString("\n")
                 )
             }
