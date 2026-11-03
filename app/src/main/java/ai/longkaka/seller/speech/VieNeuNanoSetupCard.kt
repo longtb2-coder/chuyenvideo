@@ -108,7 +108,7 @@ fun VieNeuNanoSetupCard(
                                     check(folder.exists() || folder.mkdirs()) { "Không tạo được thư mục âm thanh." }
                                     val timings = mutableListOf<VieNeuChunkTiming>()
                                     val wav = active.synthesizeToWav(
-                                        text, selectedVoice, File(folder, "vieneu_nano_preview.wav"), steps = 8,
+                                        text, selectedVoice, File(folder, "seller_narration_${System.currentTimeMillis()}.wav"), steps = 8,
                                         onChunkTiming = { timings += it }
                                     )
                                     val srt = timings.mapIndexed { index, cue ->
@@ -121,8 +121,8 @@ fun VieNeuNanoSetupCard(
                                         }
                                         "${index + 1}\n${fmt(start)} --> ${fmt(end)}\n${cue.text}\n"
                                     }.joinToString("\n")
-                                    File(folder, "vieneu_nano_preview.srt").writeText(srt, Charsets.UTF_8)
-                                    wav to timings.toList()
+                                    File(folder, "${wav.nameWithoutExtension}.srt").writeText(srt, Charsets.UTF_8)
+                                    wav to timings.toList() to timings.toList()
                                 }
                                 val file = generated.first
                                 output = file
