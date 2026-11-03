@@ -116,8 +116,8 @@ fun VieNeuNanoSetupCard(sourceText: String) {
                                             val s = (ms % 60_000L) / 1_000L; val milli = ms % 1_000L
                                             String.format(java.util.Locale.ROOT, "%02d:%02d:%02d,%03d", h, m, s, milli)
                                         }
-                                        "${index + 1}\\n${fmt(start)} --> ${fmt(end)}\\n${cue.text}\\n"
-                                    }.joinToString("\\n")
+                                        "${index + 1}\n${fmt(start)} --> ${fmt(end)}\n${cue.text}\n"
+                                    }.joinToString("\n")
                                     File(folder, "vieneu_nano_preview.srt").writeText(srt, Charsets.UTF_8)
                                     wav
                                 }
