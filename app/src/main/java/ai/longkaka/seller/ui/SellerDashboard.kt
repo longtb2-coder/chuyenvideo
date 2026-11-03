@@ -44,9 +44,9 @@ import ai.longkaka.seller.media.VideoLibraryRepository
 import ai.longkaka.seller.translation.ChineseOverlayTranslator
 import ai.longkaka.seller.translation.OnScreenText
 import ai.longkaka.seller.translation.ProductCategory
-import ai.longkaka.seller.translation.boundsAt
 import ai.longkaka.seller.processing.TextRegionInpainting
 import ai.longkaka.seller.processing.VideoFrameRepairPreview
+import ai.longkaka.seller.processing.TextRemovalPlanner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -302,21 +302,17 @@ fun SellerDashboard() {
                             val video = importedVideo
                             val selectedItems = selectedRemovalIndices.sorted().mapNotNull { translatedOverlays.getOrNull(it) }
                             val previewTimeMs = selectedItems.firstOrNull()?.timeMs
-                            // Use the interpolated box at this exact timestamp, not the union of the
-                            // whole track, so moving text does not create an oversized removal mask.
-                            val activeBoxes = if (previewTimeMs == null) emptyList() else selectedItems.mapNotNull {
-                                it.boundsAt(previewTimeMs)
+                            // Build masks from the selected tracks at this exact timestamp.
+                            val previewRegions = if (previewTimeMs == null) emptyList() else {
+                                TextRemovalPlanner.regionsAt(translatedOverlays, selectedRemovalIndices, previewTimeMs)
                             }
-                            if (video != null && previewTimeMs != null && activeBoxes.isNotEmpty() && !isRepairing) {
+                            if (video != null && previewTimeMs != null && previewRegions.isNotEmpty() && !isRepairing) {
                                 scope.launch {
                                     isRepairing = true
-                                    repairStatus = "Đang phục hồi ${activeBoxes.size} vùng chữ tại ${formatDuration(previewTimeMs)}…"
+                                    repairStatus = "Đang phục hồi ${previewRegions.size} vùng chữ tại ${formatDuration(previewTimeMs)}…"
                                     try {
-                                        val regions = activeBoxes.map { box ->
-                                            TextRegionInpainting.Region(box.left, box.top, box.right, box.bottom)
-                                        }
                                         val bitmap = withContext(Dispatchers.Default) {
-                                            VideoFrameRepairPreview.create(context, Uri.parse(video.contentUri), previewTimeMs, regions)
+                                            VideoFrameRepairPreview.create(context, Uri.parse(video.contentUri), previewTimeMs, previewRegions)
                                         }
                                         repairPreview?.recycle()
                                         repairPreview = bitmap
