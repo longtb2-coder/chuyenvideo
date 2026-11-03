@@ -66,25 +66,28 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 AndroidView(factory = { c -> PlayerView(c).apply { player = exoPlayer; useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT } },
                     update = { it.player = exoPlayer }, modifier = Modifier.fillMaxSize())
                 if (selected in overlays.indices) {
-                    val cover = covers[selected]
-                    if (coverEnabled[selected]) {
-                        Box(Modifier.offset { IntOffset((cover.left*bw).roundToInt(), (cover.top*bh).roundToInt()) }
-                            .size((cover.width*maxWidth.value).dp, (cover.height*maxHeight.value).dp)
-                            .background(Color(coverColor).copy(alpha=coverAlpha), RoundedCornerShape(3.dp))
-                            .pointerInput(selected, cover) { detectDragGestures { change, drag ->
+                    if (layer == EditorLayer.COVER) {
+                        val cover = covers[selected]
+                        if (coverEnabled[selected]) {
+                            Box(Modifier.offset { IntOffset((cover.left*bw).roundToInt(), (cover.top*bh).roundToInt()) }
+                                .size((cover.width*maxWidth.value).dp, (cover.height*maxHeight.value).dp)
+                                .background(Color(coverColor).copy(alpha=coverAlpha), RoundedCornerShape(3.dp))
+                                .pointerInput(selected, cover) { detectDragGestures { change, drag ->
+                                    change.consume()
+                                    covers = covers.toMutableList().also { it[selected] = cover.copy(left=(cover.left+drag.x/bw).coerceIn(0f,1f-cover.width), top=(cover.top+drag.y/bh).coerceIn(0f,1f-cover.height)) }
+                                } })
+                        }
+                    } else {
+                        val tr = translations[selected]
+                        Box(Modifier.offset { IntOffset((tr.left*bw).roundToInt(), (tr.top*bh).roundToInt()) }
+                            .size((tr.width*maxWidth.value).dp, (tr.height*maxHeight.value).dp)
+                            .background(Color.Black.copy(alpha=.18f), RoundedCornerShape(3.dp))
+                            .pointerInput(selected, tr) { detectDragGestures { change, drag ->
                                 change.consume()
-                                covers = covers.toMutableList().also { it[selected] = cover.copy(left=(cover.left+drag.x/bw).coerceIn(0f,1f-cover.width), top=(cover.top+drag.y/bh).coerceIn(0f,1f-cover.height)) }
-                            } })
-                    }
-                    val tr = translations[selected]
-                    Box(Modifier.offset { IntOffset((tr.left*bw).roundToInt(), (tr.top*bh).roundToInt()) }
-                        .size((tr.width*maxWidth.value).dp, (tr.height*maxHeight.value).dp)
-                        .background(Color.Black.copy(alpha=.18f), RoundedCornerShape(3.dp))
-                        .pointerInput(selected, tr) { detectDragGestures { change, drag ->
-                            change.consume()
-                            translations = translations.toMutableList().also { it[selected] = tr.copy(left=(tr.left+drag.x/bw).coerceIn(0f,1f-tr.width), top=(tr.top+drag.y/bh).coerceIn(0f,1f-tr.height)) }
-                        } }, contentAlignment=Alignment.Center) {
-                        Text(editedTexts[selected] ?: overlays[selected].vietnameseText, color=Color.White, fontSize=textSize.sp, lineHeight=(textSize*1.15f).sp)
+                                translations = translations.toMutableList().also { it[selected] = tr.copy(left=(tr.left+drag.x/bw).coerceIn(0f,1f-tr.width), top=(tr.top+drag.y/bh).coerceIn(0f,1f-tr.height)) }
+                            } }, contentAlignment=Alignment.Center) {
+                            Text(editedTexts[selected] ?: overlays[selected].vietnameseText, color=Color.White, fontSize=textSize.sp, lineHeight=(textSize*1.15f).sp)
+                        }
                     }
                 }
             }
@@ -113,6 +116,10 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     FilterChip(selected=layer==EditorLayer.COVER,onClick={layer=EditorLayer.COVER},label={Text("Chỉnh khung che")})
                 }
                 if(layer==EditorLayer.COVER) {
+                    Text("Chiều rộng khung: ${(covers[selected].width*100).roundToInt()}%")
+                    Slider(value=covers[selected].width,onValueChange={ v -> covers=covers.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,1f-covers[selected].left)) } },valueRange=.05f..1f)
+                    Text("Chiều cao khung: ${(covers[selected].height*100).roundToInt()}%")
+                    Slider(value=covers[selected].height,onValueChange={ v -> covers=covers.toMutableList().also { it[selected]=it[selected].copy(height=v.coerceIn(.03f,1f-covers[selected].top)) } },valueRange=.03f..1f)
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Checkbox(checked=coverEnabled[selected],onCheckedChange={ v -> coverEnabled=coverEnabled.toMutableList().also { it[selected]=v } })
                         Text("Bật khung che chữ gốc")
@@ -127,6 +134,10 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     Text("Độ đậm nền: ${(coverAlpha*100).roundToInt()}%")
                     Slider(value=coverAlpha,onValueChange={coverAlpha=it},valueRange=.1f..1f)
                 } else {
+                    Text("Chiều rộng vùng dịch: ${(translations[selected].width*100).roundToInt()}%")
+                    Slider(value=translations[selected].width,onValueChange={ v -> translations=translations.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,1f-translations[selected].left)) } },valueRange=.05f..1f)
+                    Text("Chiều cao vùng dịch: ${(translations[selected].height*100).roundToInt()}%")
+                    Slider(value=translations[selected].height,onValueChange={ v -> translations=translations.toMutableList().also { it[selected]=it[selected].copy(height=v.coerceIn(.03f,1f-translations[selected].top)) } },valueRange=.03f..1f)
                     Text("Cỡ chữ dịch: ${textSize.roundToInt()} sp")
                     Slider(value=textSize,onValueChange={textSize=it},valueRange=10f..28f)
                 }
