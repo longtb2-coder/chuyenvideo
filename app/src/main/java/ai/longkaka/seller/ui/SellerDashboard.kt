@@ -299,19 +299,27 @@ fun SellerDashboard() {
                     OutlinedButton(
                         onClick = {
                             val video = importedVideo
-                            val selected = selectedRemovalIndices.firstOrNull()?.let { translatedOverlays.getOrNull(it) }
-                            if (video != null && selected != null && !isRepairing) {
+                            val selectedItems = selectedRemovalIndices.sorted().mapNotNull { translatedOverlays.getOrNull(it) }
+                            val previewTimeMs = selectedItems.firstOrNull()?.timeMs
+                            // Only combine boxes that are actually present at the preview timestamp.
+                            // Tracks appearing later are intentionally excluded from this single-frame preview.
+                            val activeItems = if (previewTimeMs == null) emptyList() else selectedItems.filter {
+                                it.timeMs <= previewTimeMs && it.lastTimeMs >= previewTimeMs
+                            }
+                            if (video != null && previewTimeMs != null && activeItems.isNotEmpty() && !isRepairing) {
                                 scope.launch {
                                     isRepairing = true
-                                    repairStatus = "Đang phục hồi thử một khung hình trên điện thoại…"
+                                    repairStatus = "Đang phục hồi ${activeItems.size} vùng chữ tại ${formatDuration(previewTimeMs)}…"
                                     try {
-                                        val region = TextRegionInpainting.Region(selected.left, selected.top, selected.right, selected.bottom)
+                                        val regions = activeItems.map { item ->
+                                            TextRegionInpainting.Region(item.left, item.top, item.right, item.bottom)
+                                        }
                                         val bitmap = withContext(Dispatchers.Default) {
-                                            VideoFrameRepairPreview.create(context, Uri.parse(video.contentUri), selected.timeMs, listOf(region))
+                                            VideoFrameRepairPreview.create(context, Uri.parse(video.contentUri), previewTimeMs, regions)
                                         }
                                         repairPreview?.recycle()
                                         repairPreview = bitmap
-                                        repairStatus = "Đã tạo ảnh xem trước phục hồi cục bộ. Kiểm tra kỹ trước khi áp dụng cho video."
+                                        repairStatus = "Đã xem trước ${activeItems.size} vùng đang xuất hiện tại mốc này. Đây chưa phải xử lý toàn video."
                                     } catch (error: Throwable) {
                                         repairStatus = error.message ?: "Không thể phục hồi khung hình này."
                                     } finally {
