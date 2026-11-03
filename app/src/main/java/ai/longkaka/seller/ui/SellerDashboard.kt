@@ -48,6 +48,7 @@ import ai.longkaka.seller.translation.ProductCategory
 import ai.longkaka.seller.processing.VideoFrameRepairPreview
 import ai.longkaka.seller.processing.TextRemovalPlanner
 import ai.longkaka.seller.speech.VieNeuNanoSetupCard
+import ai.longkaka.seller.subtitle.VietnameseSubtitleTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -79,6 +80,20 @@ fun SellerDashboard() {
     var importStatus by remember { mutableStateOf("Chưa có video được nhập.") }
     var importProgress by remember { mutableIntStateOf(0) }
     var isImporting by remember { mutableStateOf(false) }
+    var pendingSubtitleText by remember { mutableStateOf("") }
+    var subtitleExportStatus by remember { mutableStateOf("Chưa xuất phụ đề.") }
+
+    val subtitleSaver = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-subrip")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(pendingSubtitleText) }
+                    ?: error("Không mở được tệp để ghi phụ đề.")
+            }.onSuccess { subtitleExportStatus = "Đã lưu phụ đề SRT thành công." }
+             .onFailure { subtitleExportStatus = it.message ?: "Không thể lưu phụ đề." }
+        }
+    }
 
     LaunchedEffect(library) {
         videoLibrary = runCatching { library.getAll() }.getOrDefault(emptyList())
@@ -320,6 +335,23 @@ fun SellerDashboard() {
                     }
                 }
                 if (translatedOverlays.isNotEmpty()) {
+                    val subtitleCues = remember(translatedOverlays, editedTranslations, importedVideo) {
+                        importedVideo?.let { video ->
+                            VietnameseSubtitleTrack.fromOverlays(
+                                translatedOverlays, editedTranslations, video.durationMs
+                            )
+                        }.orEmpty()
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            pendingSubtitleText = VietnameseSubtitleTrack.toSrt(subtitleCues)
+                            subtitleSaver.launch("LONGKAKA_phude_tieng_viet.srt")
+                        },
+                        enabled = subtitleCues.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("XUẤT PHỤ ĐỀ TIẾNG VIỆT (.SRT)") }
+                    Text(subtitleExportStatus, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Chỉ chọn những chữ phủ do video thêm vào. Không chọn logo, nhãn hiệu, thông số in trên bao bì nếu muốn giữ nguyên.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedButton(
@@ -375,12 +407,12 @@ fun SellerDashboard() {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("04  •  THÀNH PHẨM", style = MaterialTheme.typography.titleMedium)
                 ToolRow(Icons.Rounded.Movie, if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Dựng phim ngắn thuyết minh tiếng Việt" else "Biên tập video bán hàng", if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Khử chữ • phụ đề • giọng đọc • âm thanh gốc" else "Tỷ lệ dọc 9:16 • lợi ích • giá • CTA")
-                Button(onClick = { /* Export pipeline is not connected yet. */ },
-                    enabled = importedVideo != null && !isImporting,
+                Button(onClick = { },
+                    enabled = false,
                     modifier = Modifier.fillMaxWidth()) {
-                    Text(if (workflowMode == SellerWorkflowMode.SHORT_FILM) "XUẤT PHIM NGẮN TIẾNG VIỆT" else "TẠO VIDEO BÁN HÀNG")
+                    Text(if (workflowMode == SellerWorkflowMode.SHORT_FILM) "XUẤT MP4 PHIM NGẮN (ĐANG HOÀN THIỆN)" else "XUẤT MP4 VIDEO BÁN HÀNG (ĐANG HOÀN THIỆN)")
                 }
-                Text("Hiện đã có bước nhận và lưu video. Các bộ xử lý AI và xuất video sẽ chỉ bật sau khi được tích hợp và kiểm thử.",
+                Text("Đã có thể xuất phụ đề SRT sau khi quét và duyệt bản dịch. Xuất MP4 toàn quy trình chưa được bật để tránh tạo tệp video lỗi hoặc thiếu âm thanh.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
