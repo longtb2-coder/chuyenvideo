@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.graphics.Bitmap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -201,6 +202,8 @@ private suspend fun translateOnline(source: String): String? = withContext(Dispa
         if (responseStatus == 200 && translated.isNotBlank() &&
             !translated.equals(source, ignoreCase = true) &&
             !translated.contains("MYMEMORY WARNING")) translated else null
+    } catch (cancelled: CancellationException) {
+        throw cancelled
     } catch (_: Exception) {
         null
     } finally {
