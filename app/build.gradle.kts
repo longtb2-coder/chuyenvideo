@@ -35,6 +35,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.work:work-runtime-ktx:2.10.5")
+    // VieNeu Nano runs locally through ONNX Runtime; SEA-G2P JNI is built in CI.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.documentfile:documentfile:1.1.0")
     // Bundled on-device Chinese OCR and offline Chinese → Vietnamese translation.
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
