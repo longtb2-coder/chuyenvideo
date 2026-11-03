@@ -25,6 +25,20 @@ class TextTrackGeometryTest {
     }
 
     @Test
+    fun doesNotInterpolateAcrossLongOcrGap() {
+        val track = OnScreenText(
+            sourceText = "促销", vietnameseText = "Khuyến mãi",
+            timeMs = 0L, lastTimeMs = 5_000L,
+            left = 0.1f, top = 0.2f, right = 0.3f, bottom = 0.4f,
+            observations = listOf(
+                TextRegionObservation(0L, 0.1f, 0.2f, 0.3f, 0.4f),
+                TextRegionObservation(5_000L, 0.3f, 0.4f, 0.5f, 0.6f)
+            )
+        )
+        assertNull(track.boundsAt(2_500L))
+    }
+
+    @Test
     fun returnsNullOutsideObservedTimeRange() {
         val track = OnScreenText(
             sourceText = "促销", vietnameseText = "Khuyến mãi",
