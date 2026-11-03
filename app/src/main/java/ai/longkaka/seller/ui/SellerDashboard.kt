@@ -47,10 +47,13 @@ import ai.longkaka.seller.translation.OnScreenText
 import ai.longkaka.seller.translation.ProductCategory
 import ai.longkaka.seller.processing.VideoFrameRepairPreview
 import ai.longkaka.seller.processing.TextRemovalPlanner
+import ai.longkaka.seller.speech.VieNeuNanoSetupCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.util.Locale
+
+enum class SellerWorkflowMode { SHORT_FILM, SALES_VIDEO }
 
 @Composable
 fun SellerDashboard() {
@@ -59,6 +62,7 @@ fun SellerDashboard() {
     val importer = remember(context) { VideoImportRepository(context.applicationContext) }
     val library = remember(context) { VideoLibraryRepository(context.applicationContext) }
     val overlayTranslator = remember(context) { ChineseOverlayTranslator(context.applicationContext) }
+    var workflowMode by remember { mutableStateOf(SellerWorkflowMode.SALES_VIDEO) }
     var translatedOverlays by remember { mutableStateOf<List<OnScreenText>>(emptyList()) }
     var editedTranslations by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
     var selectedCategory by remember { mutableStateOf(ProductCategory.AUTO) }
@@ -127,7 +131,26 @@ fun SellerDashboard() {
             }
             Text("● SẴN SÀNG", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
         }
-        Text("Biến video sản phẩm thành video bán hàng Việt", style = MaterialTheme.typography.headlineSmall)
+        Text("Chọn quy trình làm video", style = MaterialTheme.typography.headlineSmall)
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { workflowMode = SellerWorkflowMode.SHORT_FILM }, modifier = Modifier.weight(1f)) {
+                        Text(if (workflowMode == SellerWorkflowMode.SHORT_FILM) "✓ PHIM NGẮN" else "PHIM NGẮN")
+                    }
+                    OutlinedButton(onClick = { workflowMode = SellerWorkflowMode.SALES_VIDEO }, modifier = Modifier.weight(1f)) {
+                        Text(if (workflowMode == SellerWorkflowMode.SALES_VIDEO) "✓ BÁN HÀNG" else "VIDEO BÁN HÀNG")
+                    }
+                }
+                Text(
+                    if (workflowMode == SellerWorkflowMode.SHORT_FILM)
+                        "Phát hiện chữ Trung → xóa/phục hồi hoặc làm mờ đúng vùng → dịch tự nhiên → phụ đề và thuyết minh đồng bộ."
+                    else
+                        "Phân tích hình ảnh, chữ và lời thoại → xác định sản phẩm → kiểm chứng thông tin bên ngoài → viết kịch bản bán hàng → dựng video tiếng Việt.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -220,8 +243,10 @@ fun SellerDashboard() {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("03  •  XỬ LÝ AI", style = MaterialTheme.typography.titleMedium)
-                ToolRow(Icons.Rounded.Translate, "Nhận diện & dịch chữ Trung trên hình", "Dịch theo ngữ cảnh ngành hàng, ưu tiên thuật ngữ sản phẩm")
+                Text(if (workflowMode == SellerWorkflowMode.SHORT_FILM) "03  •  XỬ LÝ PHIM NGẮN" else "03  •  PHÂN TÍCH SẢN PHẨM & BÁN HÀNG", style = MaterialTheme.typography.titleMedium)
+                ToolRow(Icons.Rounded.Translate,
+                    if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Nhận diện chữ Trung và dịch lời thoại trên hình" else "Trích xuất nội dung video và thông tin sản phẩm",
+                    if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Giữ ngữ cảnh phim và mốc thời gian" else "Kết hợp OCR, hình ảnh sản phẩm và lời nói")
                 OutlinedButton(
                     onClick = {
                         val categories = ProductCategory.values()
@@ -334,20 +359,26 @@ fun SellerDashboard() {
                             modifier = Modifier.fillMaxWidth().height(220.dp))
                     }
                 }
-                ToolRow(Icons.Rounded.AutoAwesome, "Làm sạch chữ trên video", "Đã có phục hồi thử một khung hình bằng OpenCV; xử lý video liên tục và AI nâng cao đang phát triển")
-                ToolRow(Icons.Rounded.Subtitles, "Tạo phụ đề tiếng Việt", "Căn thời gian và cho phép chỉnh sửa")
-                ToolRow(Icons.Rounded.CloudDownload, "Thay giọng đọc tiếng Việt", "Chọn giọng và nghe thử trước khi ghép")
+                ToolRow(Icons.Rounded.AutoAwesome,
+                    if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Xóa chữ Trung / làm mờ đúng vùng chữ" else "Phân tích lợi ích, điểm khác biệt và khách hàng mục tiêu",
+                    if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Hiện mới xem trước phục hồi một khung hình; chưa xuất toàn video" else "Không tự bịa thông số; phải kiểm chứng nguồn")
+                ToolRow(Icons.Rounded.Subtitles, if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Phụ đề tiếng Việt theo vị trí chữ gốc" else "Phụ đề, điểm nổi bật và lời kêu gọi mua hàng", "Căn thời gian và cho phép chỉnh sửa")
+                ToolRow(Icons.Rounded.CloudDownload, "Thuyết minh tiếng Việt bằng VieNeu Nano", "Giọng đọc offline, chọn giọng và nghe thử")
+                VieNeuNanoSetupCard(
+                    sourceText = translatedOverlays.mapIndexed { index, item -> editedTranslations[index] ?: item.vietnameseText }
+                        .filter { it.isNotBlank() }.joinToString("\n")
+                )
             }
         }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("04  •  THÀNH PHẨM", style = MaterialTheme.typography.titleMedium)
-                ToolRow(Icons.Rounded.Movie, "Biên tập video bán hàng", "Tỷ lệ dọc 9:16 • phụ đề • giá • CTA")
+                ToolRow(Icons.Rounded.Movie, if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Dựng phim ngắn thuyết minh tiếng Việt" else "Biên tập video bán hàng", if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Khử chữ • phụ đề • giọng đọc • âm thanh gốc" else "Tỷ lệ dọc 9:16 • lợi ích • giá • CTA")
                 Button(onClick = { /* Export pipeline is not connected yet. */ },
                     enabled = importedVideo != null && !isImporting,
                     modifier = Modifier.fillMaxWidth()) {
-                    Text("TẠO VIDEO BÁN HÀNG")
+                    Text(if (workflowMode == SellerWorkflowMode.SHORT_FILM) "XUẤT PHIM NGẮN TIẾNG VIỆT" else "TẠO VIDEO BÁN HÀNG")
                 }
                 Text("Hiện đã có bước nhận và lưu video. Các bộ xử lý AI và xuất video sẽ chỉ bật sau khi được tích hợp và kiểm thử.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
