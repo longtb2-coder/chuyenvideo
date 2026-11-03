@@ -125,7 +125,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                             exporter.export(videoUri, overlays,
                                 translations.map { RenderBox(it.left,it.top,it.width,it.height) },
                                 covers.map { RenderBox(it.left,it.top,it.width,it.height) },
-                                coverEnabled, coverColor, coverAlpha, textSize, editedTexts)
+                                if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts)
                         }.onSuccess { exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI" }
                          .onFailure { exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định") }
                         isExporting = false
@@ -150,10 +150,10 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 OutlinedTextField(value=editedTexts[selected] ?: overlays[selected].vietnameseText,
                     onValueChange={ onTextChange(selected,it) }, modifier=Modifier.fillMaxWidth(), label={ Text("Nội dung dịch tiếng Việt") })
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected=layer==EditorLayer.TRANSLATION,onClick={layer=EditorLayer.TRANSLATION},label={Text("Chỉnh vùng dịch")})
-                    FilterChip(selected=layer==EditorLayer.COVER,onClick={layer=EditorLayer.COVER},label={Text("Chỉnh khung che")})
+                    FilterChip(selected=layer==EditorLayer.TRANSLATION,onClick={layer=EditorLayer.TRANSLATION},label={Text("Chỉnh phụ đề")})
+                    if (salesEditing) FilterChip(selected=layer==EditorLayer.COVER,onClick={layer=EditorLayer.COVER},label={Text("Khung che")})
                 }
-                if(layer==EditorLayer.COVER) {
+                if(salesEditing && layer==EditorLayer.COVER) {
                     Text("Chiều rộng khung: ${(covers[selected].width*100).roundToInt()}%")
                     Slider(value=covers[selected].width,onValueChange={ v -> covers=covers.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,maxOf(.05f,1f-covers[selected].left))) } },valueRange=.05f..1f)
                     Text("Chiều cao khung: ${(covers[selected].height*100).roundToInt()}%")
@@ -179,7 +179,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     Text("Cỡ chữ dịch: ${textSize.roundToInt()} sp")
                     Slider(value=textSize,onValueChange={textSize=it},valueRange=10f..28f)
                 }
-                Text("Kéo trực tiếp lớp trên video để đổi vị trí. Đây là bản xem trước; tọa độ và khung che chưa được áp dụng vào MP4.", style=MaterialTheme.typography.bodySmall)
+                Text(if (salesEditing) "Kéo lớp trên video để đổi vị trí. Các chỉnh sửa được áp dụng khi xuất MP4." else "Kéo phụ đề trên video để đổi vị trí. Chỉ bản dịch đã sửa được ghi vào MP4; âm thanh và hình ảnh gốc được giữ nguyên.", style=MaterialTheme.typography.bodySmall)
             } else Text("Chưa có đoạn chữ để chỉnh. Hãy quét chữ Trung trước.", style=MaterialTheme.typography.bodySmall)
         }
     }
