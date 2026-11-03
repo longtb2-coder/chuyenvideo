@@ -12,10 +12,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.flow.flowOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.runtime.livedata.observeAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -31,7 +32,8 @@ fun BackgroundScanCard(videoUri: Uri?, category: ProductCategory) {
     val context = LocalContext.current
     val workManager = WorkManager.getInstance(context)
     val workName = videoUri?.toString()?.hashCode()?.let { "seller-scan-$it" } ?: "seller-scan-none"
-    val workInfos by workManager.getWorkInfosForUniqueWorkLiveData(workName).observeAsState()
+    val workInfosFlow = if (videoUri == null) flowOf(emptyList()) else workManager.getWorkInfosForUniqueWorkFlow(workName)
+    val workInfos by workInfosFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val work = workInfos?.firstOrNull()
     val progress = work?.progress?.getInt(MediaWorkRequest.KEY_PROGRESS, 0) ?: 0
     val isActive = work?.state == WorkInfo.State.RUNNING || work?.state == WorkInfo.State.ENQUEUED
