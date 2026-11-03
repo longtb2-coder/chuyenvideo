@@ -59,7 +59,7 @@ object TextRegionInpainting {
                     if (blockSize < 3) blockSize = 3
                     // Use one polarity only. OR-ing bright and dark thresholds would
                     // mark every pixel and erase the complete OCR rectangle.
-                    val localMean = Core.mean(roi).\`val\`[0]
+                    val localMean = Core.mean(roi).`val`[0]
                     val polarity = if (localMean >= 127.5) Imgproc.THRESH_BINARY_INV
                         else Imgproc.THRESH_BINARY
                     Imgproc.adaptiveThreshold(roi, glyphMask, 255.0,
