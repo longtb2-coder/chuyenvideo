@@ -34,7 +34,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
-    implementation("androidx.lifecycle:lifecycle-livedata-compose:2.9.4")
     implementation("androidx.work:work-runtime-ktx:2.10.5")
     implementation("androidx.documentfile:documentfile:1.1.0")
     // Bundled on-device Chinese OCR and offline Chinese → Vietnamese translation.
