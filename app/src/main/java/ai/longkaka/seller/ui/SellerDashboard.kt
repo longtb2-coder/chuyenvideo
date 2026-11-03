@@ -350,6 +350,20 @@ fun SellerDashboard() {
                                     clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Kịch bản bán hàng", generatedSalesScript))
                                 }, modifier = Modifier.fillMaxWidth()) { Text("SAO CHÉP TOÀN BỘ KỊCH BẢN") }
                             }
+                            SalesAiHandoffCard(
+                                productBrief = listOf(
+                                    "Tên sản phẩm: $productName",
+                                    "Khách hàng: $targetCustomer",
+                                    "Nhu cầu/vấn đề: $customerProblem",
+                                    "Lợi ích đã xác nhận: $productBenefits",
+                                    "Thông số đã kiểm chứng: $verifiedProductFacts",
+                                    "Giá/ưu đãi do người bán cung cấp: $productOffer",
+                                    "CTA: $salesCallToAction",
+                                    "Chữ nhận diện trong video: ${translatedOverlays.joinToString(" | ") { it.sourceText }}"
+                                ).joinToString("\\n"),
+                                currentDraft = generatedSalesScript,
+                                onAccept = { generatedSalesScript = it }
+                            )
                         }
                     }
                 }
