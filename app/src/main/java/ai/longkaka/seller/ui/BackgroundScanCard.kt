@@ -15,7 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.observeAsState
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -23,7 +23,6 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import ai.longkaka.seller.background.MediaWorkRequest
 import ai.longkaka.seller.translation.ProductCategory
-import android.content.Context
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 
