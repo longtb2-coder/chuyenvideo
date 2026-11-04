@@ -23,6 +23,7 @@ import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
 import ai.longkaka.seller.translation.OnScreenText
+import ai.longkaka.seller.translation.boundsAt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -69,20 +70,36 @@ class VideoExporter(private val context: Context) {
             override fun onDraw(canvas: Canvas, presentationTimeUs: Long) {
                 val t = presentationTimeUs / 1000L
                 overlays.forEachIndexed { index, item ->
-                    if (t < item.timeMs || t > item.lastTimeMs) return@forEachIndexed
+                    if (t < (item.timeMs - 500L).coerceAtLeast(0L) || t > item.lastTimeMs + 500L) return@forEachIndexed
                     val c = covers[index]
+                    val observed = item.boundsAt(t)
+                    val defaultLeft = (item.left - 0.025f).coerceAtLeast(0f)
+                    val defaultTop = (item.top - 0.025f).coerceAtLeast(0f)
+                    val defaultRight = (item.right + 0.025f).coerceAtMost(1f)
+                    val defaultBottom = (item.bottom + 0.025f).coerceAtMost(1f)
+                    val defaultWidth = (defaultRight - defaultLeft).coerceAtLeast(0.01f)
+                    val defaultHeight = (defaultBottom - defaultTop).coerceAtLeast(0.01f)
+                    val motionBox = if (observed != null) {
+                        val left = (observed.left - 0.025f + (c.left - defaultLeft)).coerceIn(0f, 1f)
+                        val top = (observed.top - 0.025f + (c.top - defaultTop)).coerceIn(0f, 1f)
+                        val scaleX = (c.width / defaultWidth).coerceIn(0.5f, 2.5f)
+                        val scaleY = (c.height / defaultHeight).coerceIn(0.5f, 2.5f)
+                        RenderBox(left, top,
+                            ((observed.right - observed.left + 0.05f) * scaleX).coerceAtMost(1f - left),
+                            ((observed.bottom - observed.top + 0.05f) * scaleY).coerceAtMost(1f - top))
+                    } else if (item.observations.isEmpty()) c else return@forEachIndexed
                     if (coverEnabled.getOrElse(index) { false }) {
                         coverPaint.color = coverColor
                         coverPaint.alpha = (coverAlpha.coerceIn(0f, 1f) * 255).toInt()
                         canvas.drawRoundRect(
-                            RectF(c.left * canvas.width, c.top * canvas.height,
-                                (c.left + c.width) * canvas.width, (c.top + c.height) * canvas.height),
+                            RectF(motionBox.left * canvas.width, motionBox.top * canvas.height,
+                                (motionBox.left + motionBox.width) * canvas.width, (motionBox.top + motionBox.height) * canvas.height),
                             5f, 5f, coverPaint
                         )
                     }
                     // The cover is the actual subtitle panel: burn the Vietnamese caption
                     // inside that same rectangle so it replaces (not sits beside) Chinese text.
-                    val b = if (coverEnabled.getOrElse(index) { false }) c else translations[index]
+                    val b = if (coverEnabled.getOrElse(index) { false }) motionBox else translations[index]
                     val left = b.left * canvas.width
                     val top = b.top * canvas.height
                     val right = (b.left + b.width) * canvas.width
