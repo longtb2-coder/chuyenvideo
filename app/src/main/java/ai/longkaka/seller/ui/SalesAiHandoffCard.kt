@@ -39,12 +39,13 @@ $productBrief
 Bản nháp hiện tại (nếu có):
 $currentDraft
 
-Yêu cầu:
-- Mở đầu thu hút trong 2-3 giây, nêu đúng nhu cầu khách hàng.
-- Nêu lợi ích dựa trên dữ kiện được cung cấp; tuyệt đối không tự bịa công dụng, thông số, chứng nhận, giá, giảm giá hay cam kết.
-- Ngôn ngữ nói tự nhiên, câu ngắn, dễ đọc bằng giọng AI tiếng Việt.
-- Có lời kêu gọi hành động rõ ràng nhưng không gây hiểu lầm.
-- Chỉ trả về lời thoại hoàn chỉnh, không thêm phân tích hay ghi chú.
+Nhiệm vụ:
+1. Phân tích nội dung đã dịch từ video để nhận ra sản phẩm, công dụng được thể hiện, điểm nổi bật và nhóm khách hàng có thể phù hợp.
+2. Viết MỘT kịch bản bán hàng mới, không dịch nguyên văn: mở đầu gây chú ý trong 2-3 giây, giới thiệu sản phẩm dễ hiểu, giải thích lợi ích gắn với nhu cầu, nêu lý do đáng cân nhắc mua và kết thúc bằng lời kêu gọi hành động tự nhiên.
+3. Nếu tên/mã sản phẩm đủ rõ, hãy tra cứu thêm bằng nguồn chính thức hoặc gian hàng đáng tin cậy nếu có thể; ưu tiên xác minh thông số, chất liệu, cách dùng và chính sách. Phân biệt rõ dữ kiện đã xác minh với điều chưa chắc chắn.
+4. Không tự bịa công dụng, thông số, chứng nhận, xuất xứ, giá, giảm giá, tồn kho hoặc cam kết. Nếu thiếu dữ liệu, dùng cách nói trung tính hoặc hỏi người bán bổ sung.
+5. Viết đúng thời lượng yêu cầu, tiếng Việt nói tự nhiên, câu ngắn, dễ đọc bằng giọng AI.
+Chỉ trả về lời thoại hoàn chỉnh để đưa vào tạo giọng đọc; không thêm phân tích hay ghi chú.
         """.trimIndent()
     }
 
@@ -52,7 +53,7 @@ Yêu cầu:
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("AI VIẾT KỊCH BẢN • KHÔNG CẦN API", style = MaterialTheme.typography.titleSmall)
             Text(
                 "Gửi prompt sang ChatGPT hoặc Gemini bằng ứng dụng/trình duyệt và tài khoản của bạn. Sau đó dán câu trả lời vào ô bên dưới. Không cần nhập API key.",
