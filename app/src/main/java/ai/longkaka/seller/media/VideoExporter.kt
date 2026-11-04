@@ -105,7 +105,9 @@ class VideoExporter(private val context: Context) {
                     val right = (b.left + b.width) * canvas.width
                     val bottom = (b.top + b.height) * canvas.height
                     val text = editedTexts[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText
-                    textPaint.textSize = (textSizeSp * canvas.width / 360f).coerceIn(18f, 90f)
+                    val availableHeight = (bottom - top).coerceAtLeast(1f)
+                    val requestedTextSize = (textSizeSp * canvas.width / 360f).coerceIn(18f, 90f)
+                    textPaint.textSize = minOf(requestedTextSize, (availableHeight / 1.18f).coerceAtLeast(8f))
                     val maxWidth = (right - left).coerceAtLeast(40f) - 12f
                     val lines = mutableListOf<String>()
                     var current = StringBuilder()
@@ -121,13 +123,16 @@ class VideoExporter(private val context: Context) {
                     val visibleLines = lines.take(((bottom - top) / lineHeight).toInt().coerceAtLeast(1))
                     val blockHeight = visibleLines.size * lineHeight
                     val centerX = (left + right) / 2f
-                    val firstBaseline = (top + (bottom - top - blockHeight) / 2f + textPaint.textSize)
-                        .coerceIn(top + textPaint.textSize, bottom)
+                    val firstBaseline = (top + (availableHeight - blockHeight) / 2f + textPaint.textSize)
+                        .coerceIn(top + minOf(textPaint.textSize, availableHeight), bottom)
+                    canvas.save()
+                    canvas.clipRect(RectF(left, top, right, bottom))
                     visibleLines.forEachIndexed { line, value ->
                         val y = firstBaseline + line * lineHeight
                         canvas.drawText(value, centerX, y, textBg)
                         canvas.drawText(value, centerX, y, textPaint)
                     }
+                    canvas.restore()
                 }
             }
         }
