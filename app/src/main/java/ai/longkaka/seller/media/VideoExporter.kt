@@ -8,12 +8,15 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
+import android.media.MediaMetadataRetriever
 import android.provider.MediaStore
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.CanvasOverlay
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
+import androidx.media3.transformer.Composition
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
@@ -44,10 +47,11 @@ class VideoExporter(private val context: Context) {
         coverAlpha: Float,
         textSizeSp: Float,
         editedTexts: Map<Int, String>,
+        narrationFile: File? = null,
         onProgress: (Int) -> Unit = {}
     ): Uri = withContext(Dispatchers.Main.immediate) {
-        require(overlays.isNotEmpty()) { "Chưa có nội dung được nhận diện để đưa vào video." }
-        require(translations.size == overlays.size && covers.size == overlays.size) {
+        require(source != Uri.EMPTY) { "Video đầu vào không hợp lệ." }
+        require(translations.size == overlays.size && covers.size == overlays.size && coverEnabled.size == overlays.size) {
             "Dữ liệu chỉnh sửa không khớp số đoạn chữ. Hãy quét lại video."
         }
         val temp = File(context.cacheDir, "seller_export_${System.currentTimeMillis()}.mp4")
@@ -108,9 +112,27 @@ class VideoExporter(private val context: Context) {
             }
         }
         val effect = OverlayEffect(listOf(overlay))
-        val edited = EditedMediaItem.Builder(MediaItem.fromUri(source))
+        val sourceItem = EditedMediaItem.Builder(MediaItem.fromUri(source))
             .setEffects(Effects(emptyList(), listOf(effect)))
             .build()
+        val videoSequence = EditedMediaItemSequence.withAudioAndVideoFrom(listOf(sourceItem))
+        val composition = if (narrationFile != null && narrationFile.exists() && narrationFile.length() > 44L) {
+            val durationRetriever = MediaMetadataRetriever()
+            val durationMs = try {
+                durationRetriever.setDataSource(context, source)
+                durationRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            } finally { durationRetriever.release() }
+            require(durationMs > 0L) { "Không đọc được thời lượng video để ghép giọng đọc." }
+            val narrationItem = MediaItem.Builder()
+                .setUri(Uri.fromFile(narrationFile))
+                .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setEndPositionMs(durationMs).build())
+                .build()
+            val narrationEdited = EditedMediaItem.Builder(narrationItem).setRemoveVideo(true).build()
+            val narrationSequence = EditedMediaItemSequence.withAudioFrom(listOf(narrationEdited))
+            Composition.Builder(videoSequence, narrationSequence).build()
+        } else {
+            Composition.Builder(videoSequence).build()
+        }
         try {
             suspendCancellableCoroutine<Unit> { continuation ->
                 val transformer = Transformer.Builder(context)
@@ -127,7 +149,7 @@ class VideoExporter(private val context: Context) {
                         }
                     }).build()
                 continuation.invokeOnCancellation { runCatching { transformer.cancel() } }
-                transformer.start(edited, temp.absolutePath)
+                transformer.start(composition, temp.absolutePath)
                 // Transformer reports completion asynchronously; progress is polled separately
                 // by the app's foreground export controller in the next layer.
             }
