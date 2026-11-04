@@ -13,6 +13,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -48,6 +49,7 @@ fun VieNeuNanoSetupCard(
     var output by remember { mutableStateOf<File?>(null) }
     var chunkTimings by remember { mutableStateOf<List<VieNeuChunkTiming>>(emptyList()) }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
+    var previewBusy by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -101,6 +103,39 @@ fun VieNeuNanoSetupCard(
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     voices.forEach { name -> DropdownMenuItem(text = { Text(name) }, onClick = { selectedVoice = name; expanded = false }) }
                 }
+                OutlinedButton(
+                    onClick = {
+                        val activeEngine = engine ?: return@OutlinedButton
+                        if (previewBusy || busy) return@OutlinedButton
+                        val previewText = shortPreviewText(sourceText)
+                        val voiceForPreview = selectedVoice
+                        previewBusy = true
+                        status = "Đang tạo đoạn nghe thử ngắn…"
+                        scope.launch {
+                            val previewFile = File(context.cacheDir, "vieneu_preview_${System.currentTimeMillis()}.wav")
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    activeEngine.synthesizeToWav(previewText, voiceForPreview, previewFile, steps = 8)
+                                }
+                                player?.release()
+                                player = MediaPlayer().apply {
+                                    setDataSource(previewFile.absolutePath)
+                                    setOnPreparedListener { it.start() }
+                                    setOnCompletionListener { it.release(); if (player === it) player = null }
+                                    prepareAsync()
+                                }
+                                status = "Đang nghe thử đoạn ngắn • $voiceForPreview"
+                            } catch (error: Throwable) {
+                                previewFile.delete()
+                                status = "Không nghe thử được: ${error.message ?: error.javaClass.simpleName}"
+                            } finally {
+                                previewBusy = false
+                            }
+                        }
+                    },
+                    enabled = engine != null && !busy && !previewBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (previewBusy) "ĐANG TẠO ĐOẠN NGHE THỬ…" else "NGHE THỬ GIỌNG • 10–15 GIÂY") }
                 Button(
                     onClick = {
                         if (engine == null) return@Button
@@ -152,13 +187,7 @@ fun VieNeuNanoSetupCard(
                                                 output = file
                                                 chunkTimings = timings
                                                 onNarrationReady(file, timings)
-                                                player?.release()
-                                                player = MediaPlayer().apply {
-                                                    setDataSource(file.absolutePath)
-                                                    setOnPreparedListener { it.start() }
-                                                    prepareAsync()
-                                                }
-                                                status = "Đã tạo xong âm thanh VieNeu Nano: ${file.name}"
+                                                status = "Đã tạo xong toàn bộ âm thanh VieNeu Nano: ${file.name}"
                                             } else status = "Tác vụ hoàn tất nhưng không tìm thấy tệp WAV."
                                         }
                                         if (info.state.isFinished) {
@@ -175,7 +204,7 @@ fun VieNeuNanoSetupCard(
                     },
                     enabled = !busy && engine != null,
                     modifier = Modifier.fillMaxWidth()
-                ) { Text(if (busy) "ĐANG TẠO GIỌNG NỀN…" else "TẠO GIỌNG VÀ NGHE THỬ") }
+                ) { Text(if (busy) "ĐANG TẠO GIỌNG NỀN…" else "TẠO GIỌNG ĐỌC TOÀN BỘ") }
                 output?.let { Text("Đã lưu: ${it.absolutePath}") }
             }
         }
@@ -199,4 +228,11 @@ private fun readVieNeuSrt(file: File): List<VieNeuChunkTiming> {
         val text = lines.dropWhile { it != range }.drop(1).joinToString("\n").trim()
         if (text.isBlank()) null else VieNeuChunkTiming(text, parseTime(times[0]), parseTime(times[1]))
     }
+}
+
+private fun shortPreviewText(source: String): String {
+    val clean = source.trim().ifBlank { "Xin chào. Đây là giọng đọc thử của VieNeu Nano." }
+    val firstSentence = clean.split(Regex("(?<=[.!?…])\\s+")).firstOrNull().orEmpty()
+    val selected = if (firstSentence.length in 35..220) firstSentence else clean.take(180)
+    return selected.trim().take(220)
 }

@@ -12,6 +12,7 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaExtractor
 import android.provider.MediaStore
 import androidx.media3.common.C
+import androidx.media3.common.audio.GainProcessor
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.CanvasOverlay
@@ -56,9 +57,11 @@ class VideoExporter(private val context: Context) {
         blurEnabled: List<Boolean> = emptyList(),
         blurStrength: Float = 12f,
         salesSubtitleTimings: List<VieNeuChunkTiming> = emptyList(),
-        salesSubtitleRegionIndex: Int = 0
+        salesSubtitleRegionIndex: Int = 0,
+        originalAudioVolume: Float = 1f
     ): Uri = withContext(Dispatchers.Main.immediate) {
         require(source != Uri.EMPTY) { "Video đầu vào không hợp lệ." }
+        require(originalAudioVolume in 0f..1f) { "Âm lượng âm thanh gốc phải từ 0 đến 100%." }
         require(translations.size == overlays.size && covers.size == overlays.size && coverEnabled.size == overlays.size) {
             "Dữ liệu chỉnh sửa không khớp số đoạn chữ. Hãy quét lại video."
         }
@@ -189,15 +192,30 @@ class VideoExporter(private val context: Context) {
             }
         }
         val effect = OverlayEffect(listOf(overlay))
-        val sourceBuilder = EditedMediaItem.Builder(MediaItem.fromUri(source))
+        // Separate video, source audio and narration into parallel tracks. This lets
+        // the source soundtrack be attenuated independently without muting VieNeu.
+        val sourceVideoItem = EditedMediaItem.Builder(MediaItem.fromUri(source))
             .setEffects(Effects(emptyList(), listOf(effect)))
-            .setRemoveAudio(hasNarration)
-        val sourceItem = sourceBuilder.build()
-        val sourceTrackTypes = if (hasNarration) setOf(C.TRACK_TYPE_VIDEO) else setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_VIDEO)
-        val videoSequence = EditedMediaItemSequence.Builder(sourceTrackTypes)
-            .addItem(sourceItem)
+            .setRemoveAudio(true)
             .build()
-        val composition = if (hasNarration) {
+        val videoSequence = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO))
+            .addItem(sourceVideoItem)
+            .build()
+        val compositionSequences = mutableListOf(videoSequence)
+        if (originalAudioVolume > 0f) {
+            val sourceAudioEffects = Effects(
+                listOf(GainProcessor { _ -> originalAudioVolume }),
+                emptyList()
+            )
+            val sourceAudioItem = EditedMediaItem.Builder(MediaItem.fromUri(source))
+                .setEffects(sourceAudioEffects)
+                .setRemoveVideo(true)
+                .build()
+            compositionSequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
+                .addItem(sourceAudioItem)
+                .build()
+        }
+        if (hasNarration) {
             val durationRetriever = MediaMetadataRetriever()
             val durationMs = try {
                 durationRetriever.setDataSource(context, source)
@@ -209,13 +227,11 @@ class VideoExporter(private val context: Context) {
                 .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setEndPositionMs(durationMs).build())
                 .build()
             val narrationEdited = EditedMediaItem.Builder(narrationItem).setRemoveVideo(true).build()
-            val narrationSequence = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
+            compositionSequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
                 .addItem(narrationEdited)
                 .build()
-            Composition.Builder(listOf(videoSequence, narrationSequence)).build()
-        } else {
-            Composition.Builder(listOf(videoSequence)).build()
         }
+        val composition = Composition.Builder(compositionSequences).build()
         try {
             suspendCancellableCoroutine<Unit> { continuation ->
                 val transformer = Transformer.Builder(context)

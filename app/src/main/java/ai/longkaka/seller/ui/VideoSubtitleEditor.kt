@@ -46,9 +46,12 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
         ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(videoUri)); prepare(); playWhenReady = false }
     }
     DisposableEffect(exoPlayer) { onDispose { exoPlayer.release() } }
+    LaunchedEffect(exoPlayer, originalAudioVolume) { exoPlayer.volume = originalAudioVolume.coerceIn(0f, 1f) }
     val projectStore = remember(context) { EditorProjectStore(context) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
+    var originalAudioVolume by remember { mutableFloatStateOf(1f) }
+    var previousAudioVolume by remember { mutableFloatStateOf(1f) }
     // A manual full-video region is created when OCR returns no Chinese text.
     val editableOverlays = remember(overlays, durationMs) {
         if (overlays.isNotEmpty()) overlays
@@ -183,6 +186,23 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
             }
             Slider(value=if(durationMs>0) positionMs.toFloat().coerceIn(0f,durationMs.toFloat()) else 0f,
                 onValueChange={ positionMs=it.toLong(); exoPlayer.seekTo(positionMs) }, valueRange=0f..durationMs.coerceAtLeast(1L).toFloat())
+            if (salesEditing) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically,
+                    horizontalArrangement=Arrangement.SpaceBetween) {
+                    Text("ÂM LƯỢNG ÂM THANH GỐC: ${(originalAudioVolume * 100).toInt()}%",
+                        style=MaterialTheme.typography.labelLarge)
+                    TextButton(onClick = {
+                        if (originalAudioVolume > 0f) {
+                            previousAudioVolume = originalAudioVolume
+                            originalAudioVolume = 0f
+                        } else originalAudioVolume = previousAudioVolume.coerceIn(0.05f, 1f)
+                    }) { Text(if (originalAudioVolume > 0f) "TẮT TIẾNG" else "BẬT LẠI") }
+                }
+                Slider(value=originalAudioVolume, onValueChange={ originalAudioVolume=it.coerceIn(0f,1f) },
+                    valueRange=0f..1f)
+                Text("Mức này được áp dụng cả khi xem trước và khi xuất MP4. Có thể hạ âm thanh gốc để lời thuyết minh nổi bật hơn.",
+                    style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Button(onClick = {
                 if (!isExporting) {
                     isExporting = true
@@ -194,6 +214,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                                 covers.map { RenderBox(it.left,it.top,it.width,it.height) },
                                 if (salesEditing) coverEnabled else editableOverlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile,
                                 blurEnabled = blurEnabled, blurStrength = blurStrength,
+                                originalAudioVolume = originalAudioVolume,
                                 salesSubtitleTimings = if (salesEditing) narrationTimings else emptyList(),
                                 salesSubtitleRegionIndex = selected)
                         }.onSuccess { exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI" }
