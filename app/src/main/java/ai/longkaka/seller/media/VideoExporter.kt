@@ -61,6 +61,17 @@ class VideoExporter(private val context: Context) {
         require(translations.size == overlays.size && covers.size == overlays.size && coverEnabled.size == overlays.size) {
             "Dữ liệu chỉnh sửa không khớp số đoạn chữ. Hãy quét lại video."
         }
+        val sourceProbe = MediaMetadataRetriever()
+        val sourceDurationMs = try {
+            sourceProbe.setDataSource(context, source)
+            sourceProbe.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        } finally {
+            sourceProbe.release()
+        }
+        require(sourceDurationMs > 0L) { "Không đọc được thời lượng video nguồn. Hãy chọn lại video." }
+        val hasNarration = narrationFile != null && narrationFile.exists() && narrationFile.length() > 44L
+        require(narrationFile == null || hasNarration) { "Tệp giọng đọc không tồn tại hoặc bị lỗi. Hãy tạo lại giọng đọc trước khi xuất." }
+        require(salesSubtitleTimings.isEmpty() || hasNarration) { "Có phụ đề đồng bộ giọng đọc nhưng chưa có tệp giọng đọc hợp lệ." }
         val temp = File(context.cacheDir, "seller_export_" + System.currentTimeMillis() + ".mp4")
         val blurSamples = if (blurEnabled.any { it }) withContext(Dispatchers.IO) { VideoTextBlur.prepare(context, source, overlays, covers, blurStrength) } else emptyMap()
         val overlay = object : CanvasOverlay(true) {
@@ -162,7 +173,6 @@ class VideoExporter(private val context: Context) {
             }
         }
         val effect = OverlayEffect(listOf(overlay))
-        val hasNarration = narrationFile != null && narrationFile.exists() && narrationFile.length() > 44L
         val sourceBuilder = EditedMediaItem.Builder(MediaItem.fromUri(source))
             .setEffects(Effects(emptyList(), listOf(effect)))
             .setRemoveAudio(hasNarration)
@@ -211,6 +221,18 @@ class VideoExporter(private val context: Context) {
                 // by the app's foreground export controller in the next layer.
             }
             check(temp.exists() && temp.length() > 1024L) { "Bộ dựng không tạo được tệp MP4 hợp lệ." }
+            val outputProbe = MediaMetadataRetriever()
+            try {
+                outputProbe.setDataSource(temp.absolutePath)
+                val outputDuration = outputProbe.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                val outputWidth = outputProbe.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                val outputHeight = outputProbe.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                check(outputDuration > 0L && outputWidth > 0 && outputHeight > 0) {
+                    "Tệp MP4 vừa dựng thiếu thời lượng hoặc khung hình. Không lưu tệp lỗi vào thư viện."
+                }
+            } finally {
+                outputProbe.release()
+            }
             onProgress(95)
             val values = ContentValues().apply {
                 put(MediaStore.Video.Media.DISPLAY_NAME, "LONGKAKA_${System.currentTimeMillis()}.mp4")
@@ -221,9 +243,18 @@ class VideoExporter(private val context: Context) {
             val destination = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
                 ?: error("Không tạo được tệp trong thư mục Movies.")
             try {
-                context.contentResolver.openOutputStream(destination)?.use { output ->
+                val copiedBytes = context.contentResolver.openOutputStream(destination)?.use { output ->
                     temp.inputStream().use { input -> input.copyTo(output) }
                 } ?: error("Không thể ghi video đầu ra.")
+                check(copiedBytes == temp.length()) { "Video được sao chép chưa đầy đủ. Hãy thử xuất lại." }
+                val savedProbe = MediaMetadataRetriever()
+                try {
+                    savedProbe.setDataSource(context, destination)
+                    val savedDuration = savedProbe.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    check(savedDuration > 0L) { "Video trong thư mục lưu không đọc được. Tệp chưa được công bố." }
+                } finally {
+                    savedProbe.release()
+                }
                 if (Build.VERSION.SDK_INT >= 29) {
                     context.contentResolver.update(destination, ContentValues().apply {
                         put(MediaStore.Video.Media.IS_PENDING, 0)

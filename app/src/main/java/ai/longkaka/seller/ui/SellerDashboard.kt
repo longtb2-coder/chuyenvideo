@@ -315,9 +315,9 @@ fun SellerDashboard() {
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(if (workflowMode == SellerWorkflowMode.SHORT_FILM) "03  •  XỬ LÝ PHIM NGẮN" else "03  •  PHÂN TÍCH SẢN PHẨM & BÁN HÀNG", style = MaterialTheme.typography.titleMedium)
-                ToolRow(Icons.Rounded.Translate,
-                    if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Nhận diện chữ Trung và dịch lời thoại trên hình" else "Trích xuất nội dung video và thông tin sản phẩm",
-                    if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Giữ ngữ cảnh phim và mốc thời gian" else "Kết hợp OCR, hình ảnh sản phẩm và lời nói")
+                if (workflowMode == SellerWorkflowMode.SHORT_FILM) {
+                    ToolRow(Icons.Rounded.Translate, "Nhận diện chữ Trung và dịch lời thoại trên hình", "Giữ ngữ cảnh phim và mốc thời gian")
+                }
                 OutlinedButton(
                     onClick = {
                         val categories = ProductCategory.values()
@@ -328,6 +328,7 @@ fun SellerDashboard() {
                 ) { Text("NGÀNH HÀNG: ${selectedCategory.label}  •  CHẠM ĐỂ ĐỔI") }
                 Text("Chọn đúng ngành hàng giúp tránh dịch máy móc. Tên thương hiệu, mã sản phẩm và thông số vẫn cần bạn kiểm tra ở bản xem trước.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (workflowMode == SellerWorkflowMode.SHORT_FILM) {
                 Button(
                     onClick = {
                         val video = importedVideo
@@ -365,11 +366,12 @@ fun SellerDashboard() {
                 }
                 Text(scanStatus, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (workflowMode == SellerWorkflowMode.SALES_VIDEO) {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("TRỢ LÝ KỊCH BẢN BÁN HÀNG THÍCH ỨNG", style = MaterialTheme.typography.titleSmall)
-                            Text("App sẽ lần lượt xem hình ảnh, nhận diện chữ Trung và nghe lời thoại gốc trước khi gửi dữ liệu cho AI.", style = MaterialTheme.typography.bodySmall)
+                            Text("PHÂN TÍCH SẢN PHẨM & VIẾT KỊCH BẢN BẰNG AI", style = MaterialTheme.typography.titleSmall)
+                            Text("Một lần phân tích duy nhất: app lấy ảnh cảnh quay, chữ trên hình và lời thoại; sau đó gửi cùng thông tin bạn xác nhận sang ChatGPT/Gemini để AI quan sát sản phẩm và viết lời bán hàng.", style = MaterialTheme.typography.bodySmall)
                             OutlinedButton(
                                 enabled = !isTranscribingSalesSpeech,
                                 onClick = {
@@ -473,14 +475,7 @@ fun SellerDashboard() {
                             OutlinedTextField(salesCallToAction, { salesCallToAction = it }, Modifier.fillMaxWidth(), label = { Text("Lời kêu gọi hành động") })
                             OutlinedButton(onClick = { val all = SalesCopyStyle.values(); salesCopyStyle = all[(all.indexOf(salesCopyStyle) + 1) % all.size] }, modifier = Modifier.fillMaxWidth()) { Text("CÁCH NÓI: ${salesCopyStyle.label} • CHẠM ĐỂ ĐỔI") }
                             OutlinedButton(onClick = { val all = SalesCopyLength.values(); salesCopyLength = all[(all.indexOf(salesCopyLength) + 1) % all.size] }, modifier = Modifier.fillMaxWidth()) { Text("THỜI LƯỢNG: ${salesCopyLength.label} • CHẠM ĐỂ ĐỔI") }
-                            Button(onClick = {
-                                generatedSalesScript = SalesScriptBuilder.build(
-                                    SalesProductBrief(productName, targetCustomer, customerProblem, productBenefits, verifiedProductFacts, productOffer, salesCallToAction),
-                                    translatedOverlays.map { it.sourceText + " → " + it.vietnameseText },
-                                    style = salesCopyStyle,
-                                    length = salesCopyLength
-                                ).asText()
-                            }, modifier = Modifier.fillMaxWidth()) { Text("TẠO KỊCH BẢN BÁN HÀNG") }
+                            Text("Sau khi phân tích, gửi ảnh cảnh quay và dữ liệu sang ChatGPT/Gemini để AI quan sát sản phẩm rồi viết kịch bản mới. App không tự suy đoán thông số hoặc công dụng.", style = MaterialTheme.typography.bodySmall)
                             if (generatedSalesScript.isNotBlank()) {
                                 OutlinedTextField(generatedSalesScript, { generatedSalesScript = it }, Modifier.fillMaxWidth(), label = { Text("Kịch bản có thể chỉnh sửa") }, minLines = 7)
                                 OutlinedButton(onClick = {
@@ -497,6 +492,8 @@ fun SellerDashboard() {
                                     "Thông số đã kiểm chứng: $verifiedProductFacts",
                                     "Giá/ưu đãi do người bán cung cấp: $productOffer",
                                     "CTA: $salesCallToAction",
+                                    "Phong cách kịch bản: ${salesCopyStyle.label}",
+                                    "Thời lượng mong muốn: ${salesCopyLength.label}",
                                     "Ngôn ngữ lời thoại gốc: ${salesSpeechLanguage.label}",
                                     "Lời thoại gốc đã nhận diện: $spokenTranscript",
                                     "Nội dung đã dịch từ video: ${translatedOverlays.mapIndexed { index, item -> editedTranslations[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText }.filter { it.isNotBlank() }.joinToString(" | ")}"

@@ -47,15 +47,15 @@ $currentDraft
 DỮ LIỆU ĐA PHƯƠNG THỨC:
 Hãy dùng tất cả ảnh đính kèm cùng dữ liệu văn bản bên trên. Ảnh được sắp theo thứ tự thời gian từ đầu đến cuối video. Tách bạch lời thoại đã nhận diện từ âm thanh với chữ OCR nhìn thấy trên hình; kết hợp hai nguồn nhưng không coi chúng là cùng một nội dung. Nếu transcript bị thiếu hoặc khó hiểu, ghi nhận giới hạn và không tự điền câu còn thiếu. Transcript là văn bản nên không đủ căn cứ để khẳng định cảm xúc hay chất giọng gốc.
 
-NHIỆM VỤ:
-1. Phân tích nội dung trực quan: xác định sản phẩm khi đủ căn cứ, mô tả cảnh, thao tác, chi tiết nhìn thấy và điểm nào thực sự được video chứng minh. Phân biệt quan sát trực tiếp với suy luận.
-2. Phân tích transcript lời thoại gốc cùng OCR: xác định ý giới thiệu, cách dùng, điểm bán hàng và thông tin cần kiểm chứng. Không nhầm lời nói với chữ xuất hiện trên hình.
-3. Kết hợp hình ảnh, transcript, OCR và thông tin người bán để hiểu đầy đủ nội dung giới thiệu sản phẩm.
-4. Viết MỘT kịch bản bán hàng mới, không dịch nguyên văn: mở đầu gây chú ý trong 2-3 giây, giới thiệu sản phẩm dễ hiểu, giải thích lợi ích gắn với nhu cầu, nêu lý do đáng cân nhắc mua và kết thúc bằng lời kêu gọi hành động tự nhiên.
-5. Nếu tên/mã sản phẩm đủ rõ, có thể tra cứu nguồn chính thức hoặc gian hàng đáng tin cậy để xác minh thông số, chất liệu, cách dùng và chính sách. Phân biệt dữ kiện đã xác minh với điều chưa chắc chắn.
-6. Không tự bịa công dụng, thông số, chứng nhận, xuất xứ, giá, giảm giá, tồn kho hoặc cam kết. Nếu thiếu dữ liệu, dùng cách nói trung tính.
-7. Viết đúng thời lượng yêu cầu, tiếng Việt nói tự nhiên, câu ngắn, dễ đọc bằng giọng AI.
-Chỉ trả về lời thoại hoàn chỉnh để đưa vào tạo giọng đọc; không thêm phân tích hay ghi chú.
+NHIỆM VỤ PHÂN TÍCH SẢN PHẨM:
+1. Xem lần lượt tất cả ảnh, không bỏ qua ảnh giữa video. Xác định sản phẩm/nhóm sản phẩm, hình dáng, bộ phận, phụ kiện, cách cầm/nắm/lắp đặt/vận hành, bối cảnh sử dụng và trình tự thao tác.
+2. Nêu rõ: sản phẩm giải quyết nhu cầu gì; ai có thể cần; tình huống sử dụng nào được hình ảnh chứng minh; điểm khác biệt nào nhìn thấy được; điểm nào chỉ là suy luận và chưa thể xác nhận.
+3. Đối chiếu hình ảnh với OCR và lời thoại gốc. Nếu ba nguồn mâu thuẫn, không tự chọn một thông tin làm sự thật; ưu tiên dữ kiện người bán xác nhận và ghi nhận phần chưa rõ.
+4. Trước khi viết, tự lập bảng kiểm nội bộ gồm: đặc điểm nhìn thấy, lợi ích có căn cứ, lợi ích chưa đủ căn cứ, thông tin còn thiếu, câu hỏi người mua có thể quan tâm. Không biến suy luận thành cam kết quảng cáo.
+5. Dùng phong cách và thời lượng người bán yêu cầu. Viết MỘT kịch bản mới, không dịch nguyên văn: mở đầu cuốn hút 2-3 giây; giới thiệu đúng sản phẩm; nối từng thao tác/đặc điểm nhìn thấy với lợi ích thực tế có căn cứ; nói rõ đối tượng phù hợp; kết thúc bằng CTA tự nhiên.
+6. Chỉ dùng giá, ưu đãi, thông số, chất liệu, xuất xứ, chứng nhận, bảo hành, tồn kho và công dụng đặc biệt khi có nguồn xác nhận. Nếu chưa có, bỏ qua hoặc dùng cách diễn đạt trung tính.
+7. Lời thoại tiếng Việt tự nhiên, câu ngắn, không đọc kiểu liệt kê máy móc, không lặp ý, phù hợp tốc độ giọng AI và đúng thời lượng.
+Chỉ trả về lời thoại hoàn chỉnh để đưa vào tạo giọng đọc; không thêm tiêu đề, phân tích hay ghi chú.
         """.trimIndent()
     }
 
@@ -64,10 +64,10 @@ Chỉ trả về lời thoại hoàn chỉnh để đưa vào tạo giọng đ�
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("AI VIẾT KỊCH BẢN • KHÔNG CẦN API", style = MaterialTheme.typography.titleSmall)
+            Text("AI QUAN SÁT SẢN PHẨM & VIẾT LỜI BÁN HÀNG", style = MaterialTheme.typography.titleSmall)
             Text(
                 if (analysisFrames.isEmpty()) "Hãy phân tích video để tạo ảnh cảnh quay trước. Sau đó gửi prompt kèm ảnh sang ChatGPT/Gemini."
-                else "Đã chuẩn bị ${analysisFrames.size} ảnh theo thứ tự thời gian. AI sẽ nhận ảnh thật, lời thoại đã nhận diện, chữ OCR và dữ liệu sản phẩm để viết lại lời thoại.",
+                else "Đã chuẩn bị ${analysisFrames.size} ảnh cảnh quay. Khi gửi sang ChatGPT/Gemini, AI sẽ xem sản phẩm trong ảnh, đối chiếu lời thoại, chữ OCR và thông tin bạn cung cấp rồi viết lời bán hàng mới.",
                 style = MaterialTheme.typography.bodySmall
             )
             Button(
