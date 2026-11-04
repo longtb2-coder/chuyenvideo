@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.media.MediaMetadataRetriever
 import android.provider.MediaStore
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.CanvasOverlay
@@ -115,7 +116,9 @@ class VideoExporter(private val context: Context) {
         val sourceItem = EditedMediaItem.Builder(MediaItem.fromUri(source))
             .setEffects(Effects(emptyList(), listOf(effect)))
             .build()
-        val videoSequence = EditedMediaItemSequence.Builder(listOf(sourceItem)).build()
+        val videoSequence = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_VIDEO))
+            .addItem(sourceItem)
+            .build()
         val composition = if (narrationFile != null && narrationFile.exists() && narrationFile.length() > 44L) {
             val durationRetriever = MediaMetadataRetriever()
             val durationMs = try {
@@ -128,7 +131,9 @@ class VideoExporter(private val context: Context) {
                 .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setEndPositionMs(durationMs).build())
                 .build()
             val narrationEdited = EditedMediaItem.Builder(narrationItem).setRemoveVideo(true).build()
-            val narrationSequence = EditedMediaItemSequence.Builder(listOf(narrationEdited)).setIsAudioOnly(true).build()
+            val narrationSequence = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
+                .addItem(narrationEdited)
+                .build()
             Composition.Builder(listOf(videoSequence, narrationSequence)).build()
         } else {
             Composition.Builder(listOf(videoSequence)).build()
