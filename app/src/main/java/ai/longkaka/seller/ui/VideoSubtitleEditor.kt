@@ -46,12 +46,12 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
         ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(videoUri)); prepare(); playWhenReady = false }
     }
     DisposableEffect(exoPlayer) { onDispose { exoPlayer.release() } }
-    LaunchedEffect(exoPlayer, originalAudioVolume) { exoPlayer.volume = originalAudioVolume.coerceIn(0f, 1f) }
     val projectStore = remember(context) { EditorProjectStore(context) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
     var originalAudioVolume by remember { mutableFloatStateOf(1f) }
     var previousAudioVolume by remember { mutableFloatStateOf(1f) }
+    LaunchedEffect(exoPlayer, originalAudioVolume) { exoPlayer.volume = originalAudioVolume.coerceIn(0f, 1f) }
     // A manual full-video region is created when OCR returns no Chinese text.
     val editableOverlays = remember(overlays, durationMs) {
         if (overlays.isNotEmpty()) overlays
