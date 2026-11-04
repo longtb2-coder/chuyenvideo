@@ -60,7 +60,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     var coverAlpha by remember { mutableFloatStateOf(savedProject?.coverAlpha ?: 1f) }
     var textSize by remember { mutableFloatStateOf(savedProject?.textSize ?: 16f) }
 
-    LaunchedEffect(videoUri, translations, covers, if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts) {
+    LaunchedEffect(videoUri, translations, covers, if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile) {
         projectStore.save(videoUri, SavedEditorProject(
             translations.map { SavedLayerBox(it.left,it.top,it.width,it.height) },
             covers.map { SavedLayerBox(it.left,it.top,it.width,it.height) },
@@ -120,7 +120,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
             Slider(value=if(durationMs>0) positionMs.toFloat().coerceIn(0f,durationMs.toFloat()) else 0f,
                 onValueChange={ positionMs=it.toLong(); exoPlayer.seekTo(positionMs) }, valueRange=0f..durationMs.coerceAtLeast(1L).toFloat())
             Button(onClick = {
-                if (!isExporting && overlays.isNotEmpty()) {
+                if (!isExporting) {
                     isExporting = true
                     exportStatus = "Đang kết xuất MP4…"
                     scope.launch {
@@ -134,7 +134,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                         isExporting = false
                     }
                 }
-            }, enabled = !isExporting && overlays.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
+            }, enabled = !isExporting, modifier = Modifier.fillMaxWidth()) {
                 Text(if (isExporting) "ĐANG XUẤT VIDEO…" else "XUẤT VIDEO MP4 ĐÃ CHỈNH SỬA")
             }
             Text(exportStatus, style = MaterialTheme.typography.bodySmall)
