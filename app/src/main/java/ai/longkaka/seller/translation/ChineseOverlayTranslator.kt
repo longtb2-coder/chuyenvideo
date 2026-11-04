@@ -109,7 +109,7 @@ class ChineseOverlayTranslator(private val context: Context) {
                     val result = recognizer.process(InputImage.fromBitmap(bitmap, 0)).awaitTask()
                     result.textBlocks.flatMap { it.lines }.forEach { line ->
                         val text = line.text.trim()
-                        val containsChinese = text.any { isChineseHan(it.code) }
+                        val containsChinese = containsChineseHan(text)
                         val box = line.boundingBox
                         if (containsChinese && box != null) {
                             val left = (box.left.toFloat() / bitmap.width).coerceIn(0f, 1f)
@@ -190,6 +190,17 @@ class ChineseOverlayTranslator(private val context: Context) {
  * This endpoint has a limited free quota and can be unavailable; callers always fall
  * back to the on-device ML Kit model. No API key or paid account is embedded in the app.
  */
+
+
+private fun containsChineseHan(text: String): Boolean {
+    var index = 0
+    while (index < text.length) {
+        val codePoint = Character.codePointAt(text, index)
+        if (isChineseHan(codePoint)) return true
+        index += Character.charCount(codePoint)
+    }
+    return false
+}
 
 private fun textSimilarity(a: String, b: String): Double {
     if (a.isEmpty() || b.isEmpty()) return if (a == b) 1.0 else 0.0
