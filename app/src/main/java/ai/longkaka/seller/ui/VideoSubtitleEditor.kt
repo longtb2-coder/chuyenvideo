@@ -64,7 +64,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     var covers by remember(overlays) { mutableStateOf((savedProject?.covers ?: coverDefaults).map { EditableOverlay(it.left,it.top,it.width,it.height) }) }
     var coverEnabled by remember(overlays) { mutableStateOf(savedProject?.coverEnabled ?: overlays.map { true }) }
     var coverColor by remember { mutableIntStateOf(savedProject?.coverColor ?: 0xFF111111.toInt()) }
-    var coverAlpha by remember { mutableFloatStateOf(savedProject?.coverAlpha ?: 1f) }
+    var coverAlpha by remember { mutableFloatStateOf(1f) }
     var textSize by remember { mutableFloatStateOf(savedProject?.textSize ?: 16f) }
 
     LaunchedEffect(videoUri, translations, covers, if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile) {
@@ -196,8 +196,6 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                                 border=androidx.compose.foundation.BorderStroke(1.dp,MaterialTheme.colorScheme.outline),onClick={coverColor=color}) {}
                         }
                     }
-                    Text("Độ đậm nền: ${(coverAlpha*100).roundToInt()}%")
-                    Slider(value=coverAlpha,onValueChange={coverAlpha=it},valueRange=.1f..1f)
                     Text("Cỡ phụ đề trên khung: ${textSize.roundToInt()} sp")
                     Slider(value=textSize,onValueChange={textSize=it},valueRange=10f..28f)
                 } else if (!salesEditing) {
