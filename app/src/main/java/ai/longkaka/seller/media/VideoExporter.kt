@@ -80,7 +80,9 @@ class VideoExporter(private val context: Context) {
                             5f, 5f, coverPaint
                         )
                     }
-                    val b = translations[index]
+                    // The cover is the actual subtitle panel: burn the Vietnamese caption
+                    // inside that same rectangle so it replaces (not sits beside) Chinese text.
+                    val b = if (coverEnabled.getOrElse(index) { false }) c else translations[index]
                     val left = b.left * canvas.width
                     val top = b.top * canvas.height
                     val right = (b.left + b.width) * canvas.width
