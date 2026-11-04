@@ -201,7 +201,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     }
                     Text("Cường độ làm mờ: ${blurStrength.roundToInt()}")
                     Slider(value=blurStrength,onValueChange={blurStrength=it},valueRange=3f..28f)
-                    Text("Chế độ này chỉ làm mờ vùng chữ gốc, không chèn phụ đề tiếng Việt. Vùng mờ sẽ bám theo chuyển động đã nhận diện.")
+                    Text("Làm mờ vùng chữ gốc, sau đó chèn phụ đề tiếng Việt trực tiếp lên vùng mờ. Vùng xử lý bám theo chuyển động đã nhận diện.")
                 } else if(salesEditing && layer==EditorLayer.COVER) {
                     Text("Chiều rộng khung: ${(covers[selected].width*100).roundToInt()}%")
                     Slider(value=covers[selected].width,onValueChange={ v -> covers=covers.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,maxOf(.05f,1f-covers[selected].left))) } },valueRange=.05f..1f)
@@ -228,7 +228,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     Text("Cỡ chữ dịch: ${textSize.roundToInt()} sp")
                     Slider(value=textSize,onValueChange={textSize=it},valueRange=10f..28f)
                 }
-                Text(if (layer == EditorLayer.BLUR) "Kéo vùng làm mờ trên video để chỉnh vị trí; bật/tắt riêng cho từng đoạn chữ. Hiệu ứng làm mờ thật được kết xuất vào MP4." else if (salesEditing) "Kéo lớp trên video để đổi vị trí. Các chỉnh sửa được áp dụng khi xuất MP4." else "Kéo phụ đề trên video để đổi vị trí. Chỉ bản dịch đã sửa được ghi vào MP4; âm thanh và hình ảnh gốc được giữ nguyên.", style=MaterialTheme.typography.bodySmall)
+                Text(if (layer == EditorLayer.BLUR) "Kéo vùng làm mờ để chỉnh vị trí. Khi bật, phụ đề tiếng Việt sẽ được chèn lên trên vùng đã làm mờ trong video xuất ra." else if (salesEditing) "Kéo lớp trên video để đổi vị trí. Các chỉnh sửa được áp dụng khi xuất MP4." else "Kéo phụ đề trên video để đổi vị trí. Chỉ bản dịch đã sửa được ghi vào MP4; âm thanh và hình ảnh gốc được giữ nguyên.", style=MaterialTheme.typography.bodySmall)
             } else Text("Chưa có đoạn chữ để chỉnh. Hãy quét chữ Trung trước.", style=MaterialTheme.typography.bodySmall)
         }
     }
