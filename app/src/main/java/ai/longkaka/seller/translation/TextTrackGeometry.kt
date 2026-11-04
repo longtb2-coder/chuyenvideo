@@ -1,10 +1,8 @@
 package ai.longkaka.seller.translation
 
 /**
- * Returns a motion-compensated OCR box only while the track is observed.
- *
- * We deliberately do not extrapolate before the first or after the last observation:
- * doing so can erase unrelated content after an overlay disappears.
+ * Returns a motion-compensated OCR box between observations, with a short edge tolerance
+ * to keep the cover stable between sampled frames. It never extends beyond that tolerance.
  */
 fun OnScreenText.boundsAt(
     timeMs: Long,
