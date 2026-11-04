@@ -12,7 +12,7 @@ import org.opencv.core.Mat
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
-/** Prepares real blurred source-frame patches for the independent text-blur export mode. */
+/** Samples and blurs source-frame patches densely enough for smooth subtitle replacement during export. */
 internal object VideoTextBlur {
     data class Patch(val timeMs: Long, val bitmap: Bitmap)
 
@@ -29,6 +29,13 @@ internal object VideoTextBlur {
         val retriever = MediaMetadataRetriever()
         val result = linkedMapOf<Int, MutableList<Patch>>()
         var total = 0
+        val aggregateDurationMs = overlays.indices.sumOf { index ->
+            val item = overlays[index]
+            if (boxes.getOrNull(index) == null) 0L else (item.lastTimeMs - item.timeMs).coerceAtLeast(0L)
+        }
+        // Keep memory bounded while increasing sampling from the old 1-second cadence to 5 fps
+        // for typical short clips. Longer projects automatically use a wider interval.
+        val sampleIntervalMs = (((aggregateDurationMs + 599L) / 600L).coerceAtLeast(200L) + 99L) / 100L * 100L
         try {
             retriever.setDataSource(context, source)
             overlays.forEachIndexed { index, item ->
@@ -68,7 +75,7 @@ internal object VideoTextBlur {
                             }
                         }
                     }
-                    t += 1_000L
+                    t += sampleIntervalMs
                 }
                 if (patches.isNotEmpty()) result[index] = patches
             }
