@@ -23,6 +23,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import ai.longkaka.seller.translation.OnScreenText
+import ai.longkaka.seller.translation.boundsAt
 import ai.longkaka.seller.media.VideoExporter
 import ai.longkaka.seller.media.RenderBox
 import ai.longkaka.seller.speech.vieneu.VieNeuChunkTiming
@@ -47,7 +48,13 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     DisposableEffect(exoPlayer) { onDispose { exoPlayer.release() } }
     val projectStore = remember(context) { EditorProjectStore(context) }
     val translationDefaults = remember(overlays) { overlays.map { SavedLayerBox(it.left, it.top, (it.right-it.left).coerceAtLeast(.08f), (it.bottom-it.top).coerceAtLeast(.04f)) } }
-    val coverDefaults = remember(overlays) { overlays.map { SavedLayerBox((it.left-.025f).coerceAtLeast(0f), (it.top-.025f).coerceAtLeast(0f), (it.right-it.left+.05f).coerceAtMost(1f), (it.bottom-it.top+.05f).coerceAtMost(1f)) } }
+    val coverDefaults = remember(overlays) { overlays.map { item ->
+        val left = (item.left - .025f).coerceIn(0f, 1f)
+        val top = (item.top - .025f).coerceIn(0f, 1f)
+        SavedLayerBox(left, top,
+            (item.right - item.left + .05f).coerceAtLeast(.05f).coerceAtMost(1f - left),
+            (item.bottom - item.top + .05f).coerceAtLeast(.03f).coerceAtMost(1f - top))
+    } }
     val savedProject = remember(videoUri, overlays) { projectStore.load(videoUri, overlays.size, translationDefaults, coverDefaults) }
     var selected by remember(overlays) { mutableIntStateOf(0) }
     var layer by remember { mutableStateOf(if (salesEditing) EditorLayer.COVER else EditorLayer.TRANSLATION) }
@@ -90,9 +97,19 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 if (selected in overlays.indices) {
                     if (layer == EditorLayer.COVER) {
                         val cover = covers[selected]
+                        val item = overlays[selected]
+                        val observed = item.boundsAt(positionMs)
+                        val baseLeft = (item.left - .025f).coerceAtLeast(0f)
+                        val baseTop = (item.top - .025f).coerceAtLeast(0f)
+                        val baseWidth = (item.right - item.left + .05f).coerceAtLeast(.01f)
+                        val baseHeight = (item.bottom - item.top + .05f).coerceAtLeast(.01f)
+                        val previewLeft = observed?.let { (it.left - .025f + cover.left - baseLeft).coerceIn(0f, 1f) } ?: cover.left
+                        val previewTop = observed?.let { (it.top - .025f + cover.top - baseTop).coerceIn(0f, 1f) } ?: cover.top
+                        val previewWidth = observed?.let { ((it.right-it.left+.05f) * (cover.width/baseWidth).coerceIn(.5f,2.5f)).coerceAtMost(1f-previewLeft) } ?: cover.width
+                        val previewHeight = observed?.let { ((it.bottom-it.top+.05f) * (cover.height/baseHeight).coerceIn(.5f,2.5f)).coerceAtMost(1f-previewTop) } ?: cover.height
                         if (coverEnabled[selected]) {
-                            Box(Modifier.offset { IntOffset((cover.left*bw).roundToInt(), (cover.top*bh).roundToInt()) }
-                                .size((cover.width*maxWidth.value).dp, (cover.height*maxHeight.value).dp)
+                            Box(Modifier.offset { IntOffset((previewLeft*bw).roundToInt(), (previewTop*bh).roundToInt()) }
+                                .size((previewWidth*maxWidth.value).dp, (previewHeight*maxHeight.value).dp)
                                 .background(Color(coverColor).copy(alpha=coverAlpha), RoundedCornerShape(3.dp))
                                 .pointerInput(selected, cover) { detectDragGestures { change, drag ->
                                     change.consume()
