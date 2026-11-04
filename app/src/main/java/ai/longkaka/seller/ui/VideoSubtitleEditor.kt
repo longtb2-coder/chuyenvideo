@@ -128,7 +128,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                             exporter.export(videoUri, overlays,
                                 translations.map { RenderBox(it.left,it.top,it.width,it.height) },
                                 covers.map { RenderBox(it.left,it.top,it.width,it.height) },
-                                if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts)
+                                if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile)
                         }.onSuccess { exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI" }
                          .onFailure { exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định") }
                         isExporting = false
