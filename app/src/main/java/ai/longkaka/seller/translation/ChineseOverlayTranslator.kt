@@ -68,8 +68,8 @@ class ChineseOverlayTranslator(private val context: Context) {
 
     suspend fun scanAndTranslate(
         videoUri: Uri,
-        sampleIntervalMs: Long = 1_500L,
-        maxFrames: Int = 600,
+        sampleIntervalMs: Long = 1_000L,
+        maxFrames: Int = 3_600,
         category: ProductCategory = ProductCategory.AUTO,
         onProgress: (Int) -> Unit = {}
     ): List<OnScreenText> {
@@ -110,9 +110,7 @@ class ChineseOverlayTranslator(private val context: Context) {
                     val result = recognizer.process(InputImage.fromBitmap(bitmap, 0)).awaitTask()
                     result.textBlocks.flatMap { it.lines }.forEach { line ->
                         val text = line.text.trim()
-                        val containsChinese = text.any {
-                            it.code in 0x3400..0x9FFF || it.code in 0xF900..0xFAFF
-                        }
+                        val containsChinese = text.any { isChineseHan(it.code) }
                         val box = line.boundingBox
                         if (containsChinese && box != null) {
                             val left = (box.left.toFloat() / bitmap.width).coerceIn(0f, 1f)
@@ -127,8 +125,8 @@ class ChineseOverlayTranslator(private val context: Context) {
                             // A new scene or a second copy elsewhere becomes a separate track.
                             val candidate = tracks
                                 .filter { it.normalizedText == normalized }
-                                .filter { timeMs - it.lastTimeMs <= sampleIntervalMs * 3 }
-                                .filter { hypot((it.centerX - cx).toDouble(), (it.centerY - cy).toDouble()) <= 0.13 }
+                                .filter { timeMs - it.lastTimeMs <= sampleIntervalMs * 4 }
+                                .filter { hypot((it.centerX - cx).toDouble(), (it.centerY - cy).toDouble()) <= 0.25 }
                                 .minByOrNull {
                                     hypot((it.centerX - cx).toDouble(), (it.centerY - cy).toDouble())
                                 }
@@ -193,6 +191,13 @@ class ChineseOverlayTranslator(private val context: Context) {
  * This endpoint has a limited free quota and can be unavailable; callers always fall
  * back to the on-device ML Kit model. No API key or paid account is embedded in the app.
  */
+private fun isChineseHan(code: Int): Boolean =
+    code in 0x3400..0x4DBF || code in 0x4E00..0x9FFF ||
+        code in 0xF900..0xFAFF || code in 0x20000..0x2A6DF ||
+        code in 0x2A700..0x2B73F || code in 0x2B740..0x2B81F ||
+        code in 0x2B820..0x2CEAF || code in 0x2CEB0..0x2EBEF ||
+        code in 0x30000..0x3134F || code in 0x2F800..0x2FA1F
+
 private suspend fun translateOnline(source: String): String? = withContext(Dispatchers.IO) {
     var connection: HttpURLConnection? = null
     try {
