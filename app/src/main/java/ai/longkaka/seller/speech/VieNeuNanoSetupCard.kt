@@ -184,18 +184,18 @@ fun VieNeuNanoSetupCard(
 
 private fun readVieNeuSrt(file: File): List<VieNeuChunkTiming> {
     if (!file.isFile) return emptyList()
-    val timestamp = Regex("""(\\d{2}):(\\d{2}):(\\d{2}),(\\d{3})""")
+    val timestamp = Regex("""(\d{2}):(\d{2}):(\d{2}),(\d{3})""")
     fun parseTime(value: String): Long {
         val m = timestamp.find(value) ?: return 0L
         val (h, min, sec, ms) = m.destructured
         return h.toLong() * 3_600_000L + min.toLong() * 60_000L + sec.toLong() * 1_000L + ms.toLong()
     }
-    return file.readText(Charsets.UTF_8).split(Regex("""\\r?\\n\\s*\\r?\\n""")).mapNotNull { block ->
+    return file.readText(Charsets.UTF_8).split(Regex("""\r?\n\s*\r?\n""")).mapNotNull { block ->
         val lines = block.lines()
         val range = lines.firstOrNull { it.contains(" --> ") } ?: return@mapNotNull null
         val times = range.split(" --> ", limit = 2)
         if (times.size != 2) return@mapNotNull null
-        val text = lines.dropWhile { it != range }.drop(1).joinToString("\\n").trim()
+        val text = lines.dropWhile { it != range }.drop(1).joinToString("\n").trim()
         if (text.isBlank()) null else VieNeuChunkTiming(text, parseTime(times[0]), parseTime(times[1]))
     }
 }
