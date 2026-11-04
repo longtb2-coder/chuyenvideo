@@ -316,7 +316,7 @@ fun SellerDashboard() {
                 }
                 Text(scanStatus, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (importedVideo != null && translatedOverlays.isNotEmpty()) {
+                if (importedVideo != null) {
                     VideoSubtitleEditor(
                         videoUri = Uri.parse(importedVideo!!.contentUri),
                         overlays = translatedOverlays,
@@ -409,7 +409,7 @@ fun SellerDashboard() {
                 }
                 ToolRow(Icons.Rounded.AutoAwesome,
                     if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Xóa chữ Trung / làm mờ đúng vùng chữ" else "Phân tích lợi ích, điểm khác biệt và khách hàng mục tiêu",
-                    if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Hiện mới xem trước phục hồi một khung hình; chưa xuất toàn video" else "Không tự bịa thông số; phải kiểm chứng nguồn")
+                    if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Có thể chỉnh vùng làm mờ và xuất MP4 trong trình biên tập" else "Không tự bịa thông số; phải kiểm chứng nguồn")
                 ToolRow(Icons.Rounded.Subtitles, if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Phụ đề tiếng Việt theo vị trí chữ gốc" else "Phụ đề, điểm nổi bật và lời kêu gọi mua hàng", "Căn thời gian và cho phép chỉnh sửa")
                 ToolRow(Icons.Rounded.CloudDownload, "Thuyết minh tiếng Việt bằng VieNeu Nano", "Giọng đọc offline, chọn giọng và nghe thử")
                 VieNeuNanoSetupCard(
@@ -425,8 +425,8 @@ fun SellerDashboard() {
                 Text("04  •  THÀNH PHẨM", style = MaterialTheme.typography.titleMedium)
                 ToolRow(Icons.Rounded.Movie, if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Dựng phim ngắn thuyết minh tiếng Việt" else "Biên tập video bán hàng", if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Khử chữ • phụ đề • giọng đọc • âm thanh gốc" else "Tỷ lệ dọc 9:16 • lợi ích • giá • CTA")
                 Text(
-                    if (translatedOverlays.isNotEmpty()) "Dùng nút XUẤT VIDEO MP4 ĐÃ CHỈNH SỬA trong khung xem trước phía trên để kết xuất video thật."
-                    else "Nhập video và quét chữ trước. Sau khi có kết quả, trình chỉnh sửa và nút xuất MP4 sẽ xuất hiện.",
+                    if (importedVideo != null) "Trình biên tập đã mở. Nếu OCR không tìm thấy chữ, bạn vẫn có thể tự đặt vùng làm mờ và nhập phụ đề."
+                    else "Nhập video để mở trình biên tập, làm mờ vùng chữ và chèn phụ đề.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -60,16 +60,32 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     var layer by remember { mutableStateOf(if (salesEditing) EditorLayer.COVER else EditorLayer.TRANSLATION) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
-    var translations by remember(overlays) { mutableStateOf((savedProject?.translations ?: translationDefaults).map { EditableOverlay(it.left,it.top,it.width,it.height) }) }
-    var covers by remember(overlays) { mutableStateOf((savedProject?.covers ?: coverDefaults).map { EditableOverlay(it.left,it.top,it.width,it.height) }) }
-    var coverEnabled by remember(overlays) { mutableStateOf(savedProject?.coverEnabled ?: overlays.map { true }) }
+    // If OCR finds no text, still provide one editable full-duration region for manual blur/subtitles.
+    val editableOverlays = remember(overlays, durationMs) {
+        if (overlays.isNotEmpty()) overlays
+        else if (durationMs > 0L) listOf(
+            OnScreenText(
+                sourceText = "",
+                vietnameseText = "",
+                timeMs = 0L,
+                lastTimeMs = durationMs,
+                left = 0.12f,
+                top = 0.35f,
+                right = 0.88f,
+                bottom = 0.65f
+            )
+        ) else emptyList()
+    }
+    var translations by remember(editableOverlays) { mutableStateOf((savedProject?.translations ?: translationDefaults).map { EditableOverlay(it.left,it.top,it.width,it.height) }) }
+    var covers by remember(editableOverlays) { mutableStateOf((savedProject?.covers ?: coverDefaults).map { EditableOverlay(it.left,it.top,it.width,it.height) }) }
+    var coverEnabled by remember(editableOverlays) { mutableStateOf(savedProject?.coverEnabled ?: editableOverlays.map { it.sourceText.isNotBlank() }) }
     var coverColor by remember { mutableIntStateOf(savedProject?.coverColor ?: 0xFF111111.toInt()) }
     var coverAlpha by remember { mutableFloatStateOf(1f) }
-    var blurEnabled by remember(overlays) { mutableStateOf(overlays.map { false }) }
+    var blurEnabled by remember(editableOverlays) { mutableStateOf(editableOverlays.map { false }) }
     var blurStrength by remember { mutableFloatStateOf(14f) }
     var textSize by remember { mutableFloatStateOf(savedProject?.textSize ?: 16f) }
 
-    LaunchedEffect(videoUri, translations, covers, if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile) {
+    LaunchedEffect(videoUri, translations, covers, if (salesEditing) coverEnabled else editableOverlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile) {
         projectStore.save(videoUri, SavedEditorProject(
             translations.map { SavedLayerBox(it.left,it.top,it.width,it.height) },
             covers.map { SavedLayerBox(it.left,it.top,it.width,it.height) },
@@ -84,11 +100,12 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
             delay(250)
         }
     }
-    LaunchedEffect(selected, overlays) { overlays.getOrNull(selected)?.let { exoPlayer.seekTo(it.timeMs.coerceAtLeast(0L)) } }
+    LaunchedEffect(selected, editableOverlays) { editableOverlays.getOrNull(selected)?.let { exoPlayer.seekTo(it.timeMs.coerceAtLeast(0L)) } }
 
     Card(shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Text(if (salesEditing) "BIÊN TẬP VIDEO BÁN HÀNG" else "DỊCH PHIM & CHỈNH SỬA PHỤ ĐỀ", style = MaterialTheme.typography.titleMedium)
+            if (editableOverlays.size == 1 && editableOverlays[0].sourceText.isBlank()) Text("Không nhận diện được chữ tự động. Bạn vẫn có thể tự kéo vùng làm mờ, bật làm mờ và nhập phụ đề tiếng Việt cho toàn video.", style = MaterialTheme.typography.bodySmall)
             if (salesEditing) Text(if (narrationFile != null) "Đã nhận giọng đọc VieNeu: ${narrationFile.name} • ${narrationTimings.size} đoạn căn thời gian." else "Chưa có giọng đọc bán hàng. Hãy tạo giọng VieNeu trước khi xuất video.", style = MaterialTheme.typography.bodySmall)
             Text(if (salesEditing) "Chỉnh nội dung, vị trí và lớp che trong video bán hàng." else "Chỉ sửa bản dịch tiếng Việt và vị trí phụ đề; không thêm nội dung quảng cáo hay thay đổi video gốc.", style = MaterialTheme.typography.bodySmall)
             BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(16f/9f).background(Color.Black, RoundedCornerShape(10.dp))) {
@@ -96,10 +113,10 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 val bh = constraints.maxHeight.toFloat()
                 AndroidView(factory = { c -> PlayerView(c).apply { player = exoPlayer; useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT } },
                     update = { it.player = exoPlayer }, modifier = Modifier.fillMaxSize())
-                if (selected in overlays.indices) {
+                if (selected in editableOverlays.indices) {
                     if (layer == EditorLayer.COVER || layer == EditorLayer.BLUR) {
                         val cover = covers[selected]
-                        val item = overlays[selected]
+                        val item = editableOverlays[selected]
                         val observed = item.boundsAt(positionMs)
                         val baseLeft = (item.left - .025f).coerceAtLeast(0f)
                         val baseTop = (item.top - .025f).coerceAtLeast(0f)
@@ -127,7 +144,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                                     change.consume()
                                     covers = covers.toMutableList().also { it[selected] = cover.copy(left=(cover.left+drag.x/bw).coerceIn(0f,1f-cover.width), top=(cover.top+drag.y/bh).coerceIn(0f,1f-cover.height)) }
                                 } }, contentAlignment=Alignment.Center) {
-                                Text(editedTexts[selected] ?: overlays[selected].vietnameseText,
+                                Text(editedTexts[selected] ?: editableOverlays[selected].vietnameseText,
                                     color=Color.White, fontSize=textSize.sp, lineHeight=(textSize*1.15f).sp,
                                     maxLines=3)
                             }
@@ -141,7 +158,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                                 change.consume()
                                 translations = translations.toMutableList().also { it[selected] = tr.copy(left=(tr.left+drag.x/bw).coerceIn(0f,1f-tr.width), top=(tr.top+drag.y/bh).coerceIn(0f,1f-tr.height)) }
                             } }, contentAlignment=Alignment.Center) {
-                            Text(editedTexts[selected] ?: overlays[selected].vietnameseText, color=Color.White, fontSize=textSize.sp, lineHeight=(textSize*1.15f).sp)
+                            Text(editedTexts[selected] ?: editableOverlays[selected].vietnameseText, color=Color.White, fontSize=textSize.sp, lineHeight=(textSize*1.15f).sp)
                         }
                     }
                 }
@@ -158,10 +175,10 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     exportStatus = "Đang kết xuất MP4…"
                     scope.launch {
                         runCatching {
-                            exporter.export(videoUri, overlays,
+                            exporter.export(videoUri, editableOverlays,
                                 translations.map { RenderBox(it.left,it.top,it.width,it.height) },
                                 covers.map { RenderBox(it.left,it.top,it.width,it.height) },
-                                if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile,
+                                if (salesEditing) coverEnabled else editableOverlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile,
                                 blurEnabled = blurEnabled, blurStrength = blurStrength)
                         }.onSuccess { exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI" }
                          .onFailure { exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định") }
@@ -172,10 +189,10 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 Text(if (isExporting) "ĐANG XUẤT VIDEO…" else "XUẤT VIDEO MP4 ĐÃ CHỈNH SỬA")
             }
             Text(exportStatus, style = MaterialTheme.typography.bodySmall)
-            if (overlays.isNotEmpty()) {
+            if (editableOverlays.isNotEmpty()) {
                 Text("CÁC ĐOẠN CHỮ ĐÃ NHẬN DIỆN", style=MaterialTheme.typography.labelLarge)
                 Column(Modifier.heightIn(max=160.dp).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                    overlays.forEachIndexed { index, item ->
+                    editableOverlays.forEachIndexed { index, item ->
                         OutlinedButton(onClick={ selected=index; exoPlayer.seekTo(item.timeMs) }, modifier=Modifier.fillMaxWidth()) {
                             Column(Modifier.fillMaxWidth()) {
                                 Text("Đoạn ${index+1} • ${clock(item.timeMs)}–${clock(item.lastTimeMs)}")
@@ -184,7 +201,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                         }
                     }
                 }
-                OutlinedTextField(value=editedTexts[selected] ?: overlays[selected].vietnameseText,
+                OutlinedTextField(value=editedTexts[selected] ?: editableOverlays[selected].vietnameseText,
                     onValueChange={ onTextChange(selected,it) }, modifier=Modifier.fillMaxWidth(), label={ Text("Nội dung dịch tiếng Việt") })
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     if (salesEditing) {
