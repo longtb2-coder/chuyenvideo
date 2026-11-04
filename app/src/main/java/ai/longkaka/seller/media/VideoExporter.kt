@@ -50,13 +50,16 @@ class VideoExporter(private val context: Context) {
         textSizeSp: Float,
         editedTexts: Map<Int, String>,
         narrationFile: File? = null,
-        onProgress: (Int) -> Unit = {}
+        onProgress: (Int) -> Unit = {},
+        blurEnabled: List<Boolean> = emptyList(),
+        blurStrength: Float = 12f
     ): Uri = withContext(Dispatchers.Main.immediate) {
         require(source != Uri.EMPTY) { "Video đầu vào không hợp lệ." }
         require(translations.size == overlays.size && covers.size == overlays.size && coverEnabled.size == overlays.size) {
             "Dữ liệu chỉnh sửa không khớp số đoạn chữ. Hãy quét lại video."
         }
-        val temp = File(context.cacheDir, "seller_export_${System.currentTimeMillis()}.mp4")
+        val temp = File(context.cacheDir, "seller_export_" + System.currentTimeMillis() + ".mp4")
+        val blurSamples = if (blurEnabled.any { it }) VideoTextBlur.prepare(context, source, overlays, covers, blurStrength) else emptyMap()
         val overlay = object : CanvasOverlay(true) {
             private val coverPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = coverColor }
             private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -88,6 +91,15 @@ class VideoExporter(private val context: Context) {
                             ((observed.right - observed.left + 0.05f) * scaleX).coerceAtMost(1f - left),
                             ((observed.bottom - observed.top + 0.05f) * scaleY).coerceAtMost(1f - top))
                     } else if (item.observations.isEmpty()) c else return@forEachIndexed
+                    if (blurEnabled.getOrElse(index) { false }) {
+                        val patch = blurSamples[index]?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
+                        if (patch != null) {
+                            val destination = RectF(motionBox.left * canvas.width, motionBox.top * canvas.height,
+                                (motionBox.left + motionBox.width) * canvas.width, (motionBox.top + motionBox.height) * canvas.height)
+                            canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
+                        }
+                        return@forEachIndexed
+                    }
                     if (coverEnabled.getOrElse(index) { false }) {
                         coverPaint.color = coverColor
                         coverPaint.alpha = (coverAlpha.coerceIn(0f, 1f) * 255).toInt()
@@ -212,6 +224,7 @@ class VideoExporter(private val context: Context) {
             }
         } finally {
             temp.delete()
+            VideoTextBlur.release(blurSamples)
         }
     }
 }
