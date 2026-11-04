@@ -115,8 +115,11 @@ class VideoExporter(private val context: Context) {
                     if (blurThisOverlay && trackVisible) {
                         val patch = blurSamples[index]?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
                         if (patch != null) {
-                            val destination = RectF(motionBox.left * canvas.width, motionBox.top * canvas.height,
-                                (motionBox.left + motionBox.width) * canvas.width, (motionBox.top + motionBox.height) * canvas.height)
+                            // Draw only the blurred OCR text patch at its sampled source position.
+                            // The selected region is a clip/boundary, never a full-frame blur target.
+                            val p = patch.box
+                            val destination = RectF(p.left * canvas.width, p.top * canvas.height,
+                                (p.left + p.width) * canvas.width, (p.top + p.height) * canvas.height)
                             canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
                         }
                     }
