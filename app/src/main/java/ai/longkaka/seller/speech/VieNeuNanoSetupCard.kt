@@ -24,6 +24,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import ai.longkaka.seller.speech.vieneu.VieNeuSynthesisWorker
 
 @Composable
 fun VieNeuNanoSetupCard(
@@ -97,55 +102,98 @@ fun VieNeuNanoSetupCard(
                 }
                 Button(
                     onClick = {
-                        val active = engine ?: return@Button
-                        val text = sourceText.trim().ifBlank { "Xin chào. Đây là giọng đọc thử của VieNeu Nano. Giọng kể rõ ràng, tự nhiên và giàu cảm xúc." }
+                        if (engine == null) return@Button
+                        val text = sourceText.trim().ifBlank { "Xin chào. Đây là giọng đọc thử của VieNeu Nano." }
+                        val voiceForJob = selectedVoice
                         busy = true
-                        status = "Đang tạo giọng $selectedVoice…"
+                        progress = 0
+                        status = "Đang đưa tác vụ VieNeu vào chế độ nền…"
                         scope.launch {
                             try {
-                                val generated = withContext(Dispatchers.IO) {
-                                    val folder = File(context.getExternalFilesDir(null), "LONGKAKA SELLER AI/audio")
-                                    check(folder.exists() || folder.mkdirs()) { "Không tạo được thư mục âm thanh." }
-                                    val timings = mutableListOf<VieNeuChunkTiming>()
-                                    val wav = active.synthesizeToWav(
-                                        text, selectedVoice, File(folder, "seller_narration_${System.currentTimeMillis()}.wav"), steps = 8,
-                                        onChunkTiming = { timings += it }
-                                    )
-                                    val srt = timings.mapIndexed { index, cue ->
-                                        val start = cue.startMs.coerceAtLeast(0L)
-                                        val end = cue.endMs.coerceAtLeast(start + 1L)
-                                        val fmt: (Long) -> String = { ms ->
-                                            val h = ms / 3_600_000L; val m = (ms % 3_600_000L) / 60_000L
-                                            val s = (ms % 60_000L) / 1_000L; val milli = ms % 1_000L
-                                            String.format(java.util.Locale.ROOT, "%02d:%02d:%02d,%03d", h, m, s, milli)
+                                val folder = File(context.filesDir, "LONGKAKA SELLER AI/jobs")
+                                withContext(Dispatchers.IO) {
+                                    check(folder.exists() || folder.mkdirs()) { "Không tạo được thư mục tác vụ." }
+                                }
+                                val scriptFile = File(folder, "vieneu_script_${System.currentTimeMillis()}.txt")
+                                withContext(Dispatchers.IO) { scriptFile.writeText(text, Charsets.UTF_8) }
+                                val request = OneTimeWorkRequestBuilder<VieNeuSynthesisWorker>()
+                                    .setInputData(workDataOf(
+                                        VieNeuSynthesisWorker.KEY_TEXT_FILE to scriptFile.absolutePath,
+                                        VieNeuSynthesisWorker.KEY_VOICE to voiceForJob
+                                    ))
+                                    .build()
+                                val workManager = WorkManager.getInstance(context)
+                                workManager.enqueueUniqueWork(
+                                    "vieneu_synthesis_${request.id}",
+                                    ExistingWorkPolicy.KEEP,
+                                    request
+                                )
+                                status = "Đang tạo giọng $voiceForJob ở chế độ nền. Bạn có thể chuyển sang ứng dụng khác."
+                                workManager.getWorkInfoByIdFlow(request.id).collect { info ->
+                                    if (info != null) {
+                                        progress = info.progress.getInt("progress", progress)
+                                        status = info.progress.getString("status")
+                                            ?: when (info.state) {
+                                                androidx.work.WorkInfo.State.ENQUEUED -> "Đã xếp hàng tạo giọng VieNeu."
+                                                androidx.work.WorkInfo.State.RUNNING -> "Đang tạo giọng VieNeu ở chế độ nền…"
+                                                androidx.work.WorkInfo.State.SUCCEEDED -> "Đã tạo xong giọng VieNeu."
+                                                androidx.work.WorkInfo.State.FAILED -> "Tạo giọng thất bại: ${info.outputData.getString(VieNeuSynthesisWorker.KEY_ERROR) ?: "Lỗi không xác định"}"
+                                                androidx.work.WorkInfo.State.CANCELLED -> "Tác vụ tạo giọng đã bị hủy."
+                                                else -> status
+                                            }
+                                        if (info.state == androidx.work.WorkInfo.State.SUCCEEDED) {
+                                            val path = info.outputData.getString(VieNeuSynthesisWorker.KEY_OUTPUT_FILE)
+                                            val file = path?.let(::File)
+                                            if (file != null && file.isFile && file.length() > 44L) {
+                                                val timings = readVieNeuSrt(File(file.parentFile, "${file.nameWithoutExtension}.srt"))
+                                                output = file
+                                                chunkTimings = timings
+                                                onNarrationReady(file, timings)
+                                                player?.release()
+                                                player = MediaPlayer().apply {
+                                                    setDataSource(file.absolutePath)
+                                                    setOnPreparedListener { it.start() }
+                                                    prepareAsync()
+                                                }
+                                                status = "Đã tạo xong âm thanh VieNeu Nano: ${file.name}"
+                                            } else status = "Tác vụ hoàn tất nhưng không tìm thấy tệp WAV."
                                         }
-                                        "${index + 1}\n${fmt(start)} --> ${fmt(end)}\n${cue.text}\n"
-                                    }.joinToString("\n")
-                                    File(folder, "${wav.nameWithoutExtension}.srt").writeText(srt, Charsets.UTF_8)
-                                    wav to timings.toList()
+                                        if (info.state.isFinished) {
+                                            busy = false
+                                            if (info.state != androidx.work.WorkInfo.State.SUCCEEDED) scriptFile.delete()
+                                        }
+                                    }
                                 }
-                                val file = generated.first
-                                output = file
-                                chunkTimings = generated.second
-                                onNarrationReady(file, generated.second)
-                                player?.release()
-                                player = MediaPlayer().apply {
-                                    setDataSource(file.absolutePath)
-                                    setOnPreparedListener { it.start() }
-                                    prepareAsync()
-                                }
-                                status = "Đã tạo xong âm thanh VieNeu Nano: ${file.name}"
                             } catch (e: Throwable) {
-                                status = "Tạo giọng thất bại: ${e.message ?: e.javaClass.simpleName}"
-                            } finally { busy = false }
+                                status = "Không khởi chạy được tác vụ nền: ${e.message ?: e.javaClass.simpleName}"
+                                busy = false
+                            }
                         }
                     },
                     enabled = !busy && engine != null,
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("TẠO VÀ NGHE THỬ GIỌNG Vieneu") }
+                ) { Text(if (busy) "ĐANG TẠO GIỌNG NỀN…" else "TẠO GIỌNG VÀ NGHE THỬ") }
                 output?.let { Text("Đã lưu: ${it.absolutePath}") }
             }
         }
     }
 }
 
+
+private fun readVieNeuSrt(file: File): List<VieNeuChunkTiming> {
+    if (!file.isFile) return emptyList()
+    val timestamp = Regex("""(\\d{2}):(\\d{2}):(\\d{2}),(\\d{3})""")
+    fun parseTime(value: String): Long {
+        val m = timestamp.find(value) ?: return 0L
+        val (h, min, sec, ms) = m.destructured
+        return h.toLong() * 3_600_000L + min.toLong() * 60_000L + sec.toLong() * 1_000L + ms.toLong()
+    }
+    return file.readText(Charsets.UTF_8).split(Regex("""\\r?\\n\\s*\\r?\\n""")).mapNotNull { block ->
+        val lines = block.lines()
+        val range = lines.firstOrNull { it.contains(" --> ") } ?: return@mapNotNull null
+        val times = range.split(" --> ", limit = 2)
+        if (times.size != 2) return@mapNotNull null
+        val text = lines.dropWhile { it != range }.drop(1).joinToString("\\n").trim()
+        if (text.isBlank()) null else VieNeuChunkTiming(text, parseTime(times[0]), parseTime(times[1]))
+    }
+}
