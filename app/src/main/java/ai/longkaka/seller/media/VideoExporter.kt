@@ -91,18 +91,20 @@ class VideoExporter(private val context: Context) {
                             ((observed.right - observed.left + 0.05f) * scaleX).coerceAtMost(1f - left),
                             ((observed.bottom - observed.top + 0.05f) * scaleY).coerceAtMost(1f - top))
                     } else if (item.observations.isEmpty()) c else return@forEachIndexed
-                    if (blurEnabled.any { it }) {
-                        if (blurEnabled.getOrElse(index) { false }) {
-                            val patch = blurSamples[index]?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
-                            if (patch != null) {
-                                val destination = RectF(motionBox.left * canvas.width, motionBox.top * canvas.height,
-                                    (motionBox.left + motionBox.width) * canvas.width, (motionBox.top + motionBox.height) * canvas.height)
-                                canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
-                            }
+                    val blurThisOverlay = blurEnabled.getOrElse(index) { false }
+                    // Layer 1: blur the original pixels. Keep drawing below so the Vietnamese
+                    // subtitle is composited on top of this blurred region in the same frame.
+                    if (blurThisOverlay) {
+                        val patch = blurSamples[index]?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
+                        if (patch != null) {
+                            val destination = RectF(motionBox.left * canvas.width, motionBox.top * canvas.height,
+                                (motionBox.left + motionBox.width) * canvas.width, (motionBox.top + motionBox.height) * canvas.height)
+                            canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
                         }
-                        return@forEachIndexed
                     }
-                    if (coverEnabled.getOrElse(index) { false }) {
+                    // A blur-mode subtitle sits directly on the blurred area; do not add
+                    // the opaque cover panel on top of it.
+                    if (!blurThisOverlay && coverEnabled.getOrElse(index) { false }) {
                         coverPaint.color = coverColor
                         coverPaint.alpha = (coverAlpha.coerceIn(0f, 1f) * 255).toInt()
                         canvas.drawRoundRect(
@@ -113,7 +115,7 @@ class VideoExporter(private val context: Context) {
                     }
                     // The cover is the actual subtitle panel: burn the Vietnamese caption
                     // inside that same rectangle so it replaces (not sits beside) Chinese text.
-                    val b = if (coverEnabled.getOrElse(index) { false }) motionBox else translations[index]
+                    val b = if (blurThisOverlay || coverEnabled.getOrElse(index) { false }) motionBox else translations[index]
                     val left = b.left * canvas.width
                     val top = b.top * canvas.height
                     val right = (b.left + b.width) * canvas.width
