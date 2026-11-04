@@ -51,6 +51,8 @@ import ai.longkaka.seller.sales.SalesScriptBuilder
 import ai.longkaka.seller.sales.SalesCopyStyle
 import ai.longkaka.seller.sales.SalesCopyLength
 import ai.longkaka.seller.sales.SalesVideoFrameSampler
+import ai.longkaka.seller.sales.SalesSpeechTranscriber
+import ai.longkaka.seller.sales.SalesSpeechLanguage
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -64,9 +66,14 @@ fun SellerDashboard() {
     val library = remember(context) { VideoLibraryRepository(context.applicationContext) }
     val overlayTranslator = remember(context) { ChineseOverlayTranslator(context.applicationContext) }
     val salesFrameSampler = remember(context) { SalesVideoFrameSampler(context.applicationContext) }
+    val salesSpeechTranscriber = remember(context) { SalesSpeechTranscriber(context.applicationContext) }
     var salesAnalysisFrames by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var isPreparingSalesFrames by remember { mutableStateOf(false) }
     var salesFrameStatus by remember { mutableStateOf("Chưa trích xuất ảnh phân tích video.") }
+    var salesSpeechLanguage by remember { mutableStateOf(SalesSpeechLanguage.CHINESE) }
+    var spokenTranscript by remember { mutableStateOf("") }
+    var isTranscribingSalesSpeech by remember { mutableStateOf(false) }
+    var salesSpeechStatus by remember { mutableStateOf("Chưa nhận diện lời thoại gốc.") }
     var workflowMode by remember { mutableStateOf(SellerWorkflowMode.SALES_VIDEO) }
     var translatedOverlays by remember { mutableStateOf<List<OnScreenText>>(emptyList()) }
     var editedTranslations by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
@@ -117,6 +124,10 @@ fun SellerDashboard() {
         importedVideo = video
         salesAnalysisFrames = emptyList()
         salesFrameStatus = "Video đã thay đổi. Hãy trích xuất lại ảnh phân tích."
+        spokenTranscript = ""
+        salesSpeechStatus = "Video đã thay đổi. Hãy nhận diện lại lời thoại."
+        translatedOverlays = emptyList()
+        editedTranslations = emptyMap()
     }
 
     fun showError(error: Throwable) {
@@ -260,6 +271,10 @@ fun SellerDashboard() {
                                 importedVideo = video
                                 salesAnalysisFrames = emptyList()
                                 salesFrameStatus = "Video đã thay đổi. Hãy trích xuất lại ảnh phân tích."
+                                spokenTranscript = ""
+                                salesSpeechStatus = "Video đã thay đổi. Hãy nhận diện lại lời thoại."
+                                translatedOverlays = emptyList()
+                                editedTranslations = emptyMap()
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -321,7 +336,7 @@ fun SellerDashboard() {
                     },
                     enabled = importedVideo != null && !isScanning,
                     modifier = Modifier.fillMaxWidth()
-                ) { Text(if (isScanning) "ĐANG QUÉT & DỊCH…" else "QUÉT CHỮ TRUNG VÀ DỊCH SANG TIẾNG VIỆT") }
+                ) { Text(if (isScanning) "ĐANG QUÉT & DỊCH…" else "QUÉT LẠI CHỮ TRUNG (NẾU CẦN)") }
                 if (isScanning) {
                     LinearProgressIndicator(progress = { scanProgress / 100f }, modifier = Modifier.fillMaxWidth())
                 }
@@ -342,31 +357,100 @@ fun SellerDashboard() {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("TRỢ LÝ KỊCH BẢN BÁN HÀNG THÍCH ỨNG", style = MaterialTheme.typography.titleSmall)
-                            Text("Bước đầu: trích 8 cảnh tiêu biểu để ChatGPT/Gemini nhìn trực tiếp sản phẩm và diễn biến video.", style = MaterialTheme.typography.bodySmall)
+                            Text("App sẽ lần lượt xem hình ảnh, nhận diện chữ Trung và nghe lời thoại gốc trước khi gửi dữ liệu cho AI.", style = MaterialTheme.typography.bodySmall)
+                            OutlinedButton(
+                                enabled = !isTranscribingSalesSpeech,
+                                onClick = {
+                                    val languages = SalesSpeechLanguage.values()
+                                    salesSpeechLanguage = languages[(languages.indexOf(salesSpeechLanguage) + 1) % languages.size]
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("NGÔN NGỮ LỜI THOẠI: ${salesSpeechLanguage.label} • CHẠM ĐỂ ĐỔI") }
                             Button(
                                 onClick = {
                                     val video = importedVideo
-                                    if (video != null && !isPreparingSalesFrames) {
+                                    if (video != null && !isPreparingSalesFrames && !isScanning && !isTranscribingSalesSpeech) {
                                         scope.launch {
+                                            val videoUri = Uri.parse(video.contentUri)
                                             isPreparingSalesFrames = true
-                                            salesFrameStatus = "Đang trích xuất các cảnh tiêu biểu từ video…"
+                                            isScanning = true
+                                            isTranscribingSalesSpeech = true
                                             salesAnalysisFrames = emptyList()
+                                            translatedOverlays = emptyList()
+                                            editedTranslations = emptyMap()
+                                            spokenTranscript = ""
+                                            scanProgress = 0
+                                            salesFrameStatus = "Đang trích xuất ảnh cảnh quay…"
+                                            scanStatus = "Đang nhận diện và dịch chữ Trung…"
+                                            salesSpeechStatus = "Đang chuẩn bị nhận diện lời thoại…"
                                             try {
-                                                salesAnalysisFrames = salesFrameSampler.createStoryboard(Uri.parse(video.contentUri))
-                                                salesFrameStatus = if (salesAnalysisFrames.isEmpty()) "Không trích xuất được ảnh. Hãy thử video khác."
-                                                else "Đã chuẩn bị ${salesAnalysisFrames.size} ảnh theo thứ tự thời gian. AI sẽ nhận các ảnh này cùng prompt."
-                                            } catch (error: Throwable) {
-                                                salesFrameStatus = error.message ?: "Không thể phân tích hình ảnh video."
+                                                try {
+                                                    salesAnalysisFrames = salesFrameSampler.createStoryboard(videoUri)
+                                                    salesFrameStatus = "Đã chuẩn bị ${salesAnalysisFrames.size} ảnh cảnh quay theo thứ tự thời gian."
+                                                    if (importedVideo?.contentUri != video.contentUri) return@launch
+                                                } catch (error: Throwable) {
+                                                    salesFrameStatus = error.message ?: "Không trích xuất được ảnh cảnh quay."
+                                                }
+                                                if (importedVideo?.contentUri != video.contentUri) return@launch
+                                                try {
+                                                    translatedOverlays = overlayTranslator.scanAndTranslate(
+                                                        videoUri,
+                                                        category = selectedCategory,
+                                                        onProgress = { scanProgress = it }
+                                                    )
+                                                    if (importedVideo?.contentUri != video.contentUri) return@launch
+                                                    scanStatus = if (translatedOverlays.isEmpty())
+                                                        "Không tìm thấy vùng chữ Trung đủ tin cậy."
+                                                    else "Đã nhận diện ${translatedOverlays.size} vùng chữ Trung và dịch sang tiếng Việt."
+                                                } catch (error: Throwable) {
+                                                    scanStatus = error.message ?: "Không nhận diện được chữ trong video."
+                                                }
+                                                if (importedVideo?.contentUri != video.contentUri) return@launch
+                                                try {
+                                                    spokenTranscript = salesSpeechTranscriber.transcribe(
+                                                        videoUri,
+                                                        salesSpeechLanguage,
+                                                        onStatus = { salesSpeechStatus = it }
+                                                    )
+                                                    if (importedVideo?.contentUri != video.contentUri) return@launch
+                                                    salesSpeechStatus = if (spokenTranscript.isBlank())
+                                                        "Không nhận diện được lời thoại rõ ràng."
+                                                    else "Đã nhận diện lời thoại. Bạn có thể sửa văn bản trước khi gửi AI."
+                                                } catch (error: Throwable) {
+                                                    salesSpeechStatus = error.message ?: "Không thể nhận diện lời thoại."
+                                                }
                                             } finally {
                                                 isPreparingSalesFrames = false
+                                                isScanning = false
+                                                isTranscribingSalesSpeech = false
                                             }
                                         }
                                     }
                                 },
-                                enabled = importedVideo != null && !isPreparingSalesFrames,
+                                enabled = importedVideo != null && !isPreparingSalesFrames && !isScanning && !isTranscribingSalesSpeech,
                                 modifier = Modifier.fillMaxWidth()
-                            ) { Text(if (isPreparingSalesFrames) "ĐANG PHÂN TÍCH CẢNH…" else "PHÂN TÍCH 8 CẢNH TRONG VIDEO") }
+                            ) {
+                                Text(
+                                    if (isPreparingSalesFrames || isScanning || isTranscribingSalesSpeech)
+                                        "ĐANG PHÂN TÍCH TOÀN DIỆN VIDEO…"
+                                    else "PHÂN TÍCH TOÀN DIỆN VIDEO (ẢNH + CHỮ + LỜI THOẠI)"
+                                )
+                            }
                             Text(salesFrameStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(scanStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(salesSpeechStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (isScanning) {
+                                LinearProgressIndicator(progress = { scanProgress / 100f }, modifier = Modifier.fillMaxWidth())
+                            }
+                            if (spokenTranscript.isNotBlank()) {
+                                OutlinedTextField(
+                                    value = spokenTranscript,
+                                    onValueChange = { spokenTranscript = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    minLines = 4,
+                                    label = { Text("Lời thoại gốc đã nhận diện • có thể chỉnh sửa") }
+                                )
+                            }
                             Text("Chọn cách nói và thời lượng. Kịch bản ưu tiên dữ kiện đã xác nhận; không tự bịa giá, công dụng hay chứng nhận.", style = MaterialTheme.typography.bodySmall)
                             OutlinedTextField(productName, { productName = it }, Modifier.fillMaxWidth(), label = { Text("Tên sản phẩm / mã hàng") })
                             OutlinedTextField(targetCustomer, { targetCustomer = it }, Modifier.fillMaxWidth(), label = { Text("Khách hàng mục tiêu") })
@@ -401,6 +485,8 @@ fun SellerDashboard() {
                                     "Thông số đã kiểm chứng: $verifiedProductFacts",
                                     "Giá/ưu đãi do người bán cung cấp: $productOffer",
                                     "CTA: $salesCallToAction",
+                                    "Ngôn ngữ lời thoại gốc: ${salesSpeechLanguage.label}",
+                                    "Lời thoại gốc đã nhận diện: $spokenTranscript",
                                     "Nội dung đã dịch từ video: ${translatedOverlays.mapIndexed { index, item -> editedTranslations[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText }.filter { it.isNotBlank() }.joinToString(" | ")}"
                                 ).joinToString("\n"),
                                 currentDraft = generatedSalesScript,

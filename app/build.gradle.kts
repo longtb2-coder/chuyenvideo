@@ -51,6 +51,7 @@ dependencies {
     // Bundled on-device Chinese OCR and offline Chinese → Vietnamese translation.
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
     implementation("com.google.mlkit:translate:17.0.3")
+    implementation("com.google.mlkit:genai-speech-recognition:1.0.0-alpha2")
     implementation("org.opencv:opencv:4.10.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")

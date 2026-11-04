@@ -45,15 +45,16 @@ BẢN NHÁP HIỆN TẠI (NẾU CÓ):
 $currentDraft
 
 DỮ LIỆU ĐA PHƯƠNG THỨC:
-Hãy dùng tất cả ảnh đính kèm cùng dữ liệu văn bản bên trên. Ảnh được sắp theo thứ tự thời gian từ đầu đến cuối video. Nội dung OCR nếu có chỉ là dữ liệu bổ sung, không thay thế việc quan sát ảnh.
+Hãy dùng tất cả ảnh đính kèm cùng dữ liệu văn bản bên trên. Ảnh được sắp theo thứ tự thời gian từ đầu đến cuối video. Tách bạch lời thoại đã nhận diện từ âm thanh với chữ OCR nhìn thấy trên hình; kết hợp hai nguồn nhưng không coi chúng là cùng một nội dung. Nếu transcript bị thiếu hoặc khó hiểu, ghi nhận giới hạn và không tự điền câu còn thiếu. Transcript là văn bản nên không đủ căn cứ để khẳng định cảm xúc hay chất giọng gốc.
 
 NHIỆM VỤ:
 1. Phân tích nội dung trực quan: xác định sản phẩm khi đủ căn cứ, mô tả cảnh, thao tác, chi tiết nhìn thấy và điểm nào thực sự được video chứng minh. Phân biệt quan sát trực tiếp với suy luận.
-2. Kết hợp hình ảnh với chữ nhận diện được và thông tin người bán cung cấp để hiểu nội dung giới thiệu sản phẩm.
-3. Viết MỘT kịch bản bán hàng mới, không dịch nguyên văn: mở đầu gây chú ý trong 2-3 giây, giới thiệu sản phẩm dễ hiểu, giải thích lợi ích gắn với nhu cầu, nêu lý do đáng cân nhắc mua và kết thúc bằng lời kêu gọi hành động tự nhiên.
-4. Nếu tên/mã sản phẩm đủ rõ, có thể tra cứu nguồn chính thức hoặc gian hàng đáng tin cậy để xác minh thông số, chất liệu, cách dùng và chính sách. Phân biệt dữ kiện đã xác minh với điều chưa chắc chắn.
-5. Không tự bịa công dụng, thông số, chứng nhận, xuất xứ, giá, giảm giá, tồn kho hoặc cam kết. Nếu thiếu dữ liệu, dùng cách nói trung tính.
-6. Viết đúng thời lượng yêu cầu, tiếng Việt nói tự nhiên, câu ngắn, dễ đọc bằng giọng AI.
+2. Phân tích transcript lời thoại gốc cùng OCR: xác định ý giới thiệu, cách dùng, điểm bán hàng và thông tin cần kiểm chứng. Không nhầm lời nói với chữ xuất hiện trên hình.
+3. Kết hợp hình ảnh, transcript, OCR và thông tin người bán để hiểu đầy đủ nội dung giới thiệu sản phẩm.
+4. Viết MỘT kịch bản bán hàng mới, không dịch nguyên văn: mở đầu gây chú ý trong 2-3 giây, giới thiệu sản phẩm dễ hiểu, giải thích lợi ích gắn với nhu cầu, nêu lý do đáng cân nhắc mua và kết thúc bằng lời kêu gọi hành động tự nhiên.
+5. Nếu tên/mã sản phẩm đủ rõ, có thể tra cứu nguồn chính thức hoặc gian hàng đáng tin cậy để xác minh thông số, chất liệu, cách dùng và chính sách. Phân biệt dữ kiện đã xác minh với điều chưa chắc chắn.
+6. Không tự bịa công dụng, thông số, chứng nhận, xuất xứ, giá, giảm giá, tồn kho hoặc cam kết. Nếu thiếu dữ liệu, dùng cách nói trung tính.
+7. Viết đúng thời lượng yêu cầu, tiếng Việt nói tự nhiên, câu ngắn, dễ đọc bằng giọng AI.
 Chỉ trả về lời thoại hoàn chỉnh để đưa vào tạo giọng đọc; không thêm phân tích hay ghi chú.
         """.trimIndent()
     }
@@ -66,7 +67,7 @@ Chỉ trả về lời thoại hoàn chỉnh để đưa vào tạo giọng đ�
             Text("AI VIẾT KỊCH BẢN • KHÔNG CẦN API", style = MaterialTheme.typography.titleSmall)
             Text(
                 if (analysisFrames.isEmpty()) "Hãy phân tích video để tạo ảnh cảnh quay trước. Sau đó gửi prompt kèm ảnh sang ChatGPT/Gemini."
-                else "Đã chuẩn bị ${analysisFrames.size} ảnh theo thứ tự thời gian. AI sẽ nhận ảnh thật cùng dữ liệu sản phẩm để viết lại lời thoại.",
+                else "Đã chuẩn bị ${analysisFrames.size} ảnh theo thứ tự thời gian. AI sẽ nhận ảnh thật, lời thoại đã nhận diện, chữ OCR và dữ liệu sản phẩm để viết lại lời thoại.",
                 style = MaterialTheme.typography.bodySmall
             )
             Button(
