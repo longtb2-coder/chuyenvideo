@@ -73,8 +73,8 @@ internal object VideoTextBlur {
                         // detected text bounds (with a tiny safety margin), clipped to it.
                         val padX = .006f
                         val padY = .006f
-                        val mappedTextLeft = region.left + (observed.left - baseLeft) * sx
-                        val mappedTextTop = region.top + (observed.top - baseTop) * sy
+                        val mappedTextLeft = region.left + .025f * sx
+                        val mappedTextTop = region.top + .025f * sy
                         val mappedTextRight = mappedTextLeft + (observed.right - observed.left) * sx
                         val mappedTextBottom = mappedTextTop + (observed.bottom - observed.top) * sy
                         val textLeft = max(region.left, mappedTextLeft - padX)
