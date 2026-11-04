@@ -6,8 +6,12 @@ package ai.longkaka.seller.translation
  * We deliberately do not extrapolate before the first or after the last observation:
  * doing so can erase unrelated content after an overlay disappears.
  */
-fun OnScreenText.boundsAt(timeMs: Long, maxGapMs: Long = 3_000L): TextRegionObservation? {
-    require(maxGapMs >= 0L) { "maxGapMs cannot be negative." }
+fun OnScreenText.boundsAt(
+    timeMs: Long,
+    maxGapMs: Long = 2_000L,
+    edgeToleranceMs: Long = 500L
+): TextRegionObservation? {
+    require(maxGapMs >= 0L && edgeToleranceMs >= 0L) { "Time tolerances cannot be negative." }
     val points = observations
         .asSequence()
         .filter { it.left.isFinite() && it.top.isFinite() && it.right.isFinite() && it.bottom.isFinite() }
@@ -15,7 +19,15 @@ fun OnScreenText.boundsAt(timeMs: Long, maxGapMs: Long = 3_000L): TextRegionObse
         .distinctBy { it.timeMs }
         .toList()
 
-    if (points.isEmpty() || timeMs < points.first().timeMs || timeMs > points.last().timeMs) return null
+    if (points.isEmpty()) return null
+    if (timeMs < points.first().timeMs) {
+        return points.first().takeIf { points.first().timeMs - timeMs <= edgeToleranceMs }
+            ?.let { it.copy(timeMs = timeMs) }
+    }
+    if (timeMs > points.last().timeMs) {
+        return points.last().takeIf { timeMs - points.last().timeMs <= edgeToleranceMs }
+            ?.let { it.copy(timeMs = timeMs) }
+    }
     points.firstOrNull { it.timeMs == timeMs }?.let { return it }
 
     val afterIndex = points.indexOfFirst { it.timeMs > timeMs }
