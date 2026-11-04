@@ -469,33 +469,14 @@ fun SellerDashboard() {
                             if (isScanning) {
                                 LinearProgressIndicator(progress = { scanProgress / 100f }, modifier = Modifier.fillMaxWidth())
                             }
-                            if (spokenTranscript.isNotBlank()) {
-                                OutlinedTextField(
-                                    value = spokenTranscript,
-                                    onValueChange = { spokenTranscript = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    minLines = 4,
-                                    label = { Text("Lời thoại gốc đã nhận diện • có thể chỉnh sửa") }
-                                )
-                            }
-                            Text("Chọn cách nói và thời lượng. Kịch bản ưu tiên dữ kiện đã xác nhận; không tự bịa giá, công dụng hay chứng nhận.", style = MaterialTheme.typography.bodySmall)
-                            OutlinedTextField(productName, { productName = it }, Modifier.fillMaxWidth(), label = { Text("Tên sản phẩm / mã hàng") })
-                            OutlinedTextField(targetCustomer, { targetCustomer = it }, Modifier.fillMaxWidth(), label = { Text("Khách hàng mục tiêu") })
-                            OutlinedTextField(customerProblem, { customerProblem = it }, Modifier.fillMaxWidth(), label = { Text("Vấn đề khách hàng đang gặp") })
-                            OutlinedTextField(productBenefits, { productBenefits = it }, Modifier.fillMaxWidth(), label = { Text("Lợi ích đã xác nhận") })
-                            OutlinedTextField(verifiedProductFacts, { verifiedProductFacts = it }, Modifier.fillMaxWidth(), label = { Text("Thông số / chất liệu / xuất xứ đã kiểm chứng") })
-                            OutlinedTextField(productOffer, { productOffer = it }, Modifier.fillMaxWidth(), label = { Text("Giá và ưu đãi (nếu có)") })
-                            OutlinedTextField(salesCallToAction, { salesCallToAction = it }, Modifier.fillMaxWidth(), label = { Text("Lời kêu gọi hành động") })
-                            OutlinedButton(onClick = { val all = SalesCopyStyle.values(); salesCopyStyle = all[(all.indexOf(salesCopyStyle) + 1) % all.size] }, modifier = Modifier.fillMaxWidth()) { Text("CÁCH NÓI: ${salesCopyStyle.label} • CHẠM ĐỂ ĐỔI") }
-                            OutlinedButton(onClick = { val all = SalesCopyLength.values(); salesCopyLength = all[(all.indexOf(salesCopyLength) + 1) % all.size] }, modifier = Modifier.fillMaxWidth()) { Text("THỜI LƯỢNG: ${salesCopyLength.label} • CHẠM ĐỂ ĐỔI") }
-                            Text("Sau khi phân tích, gửi ảnh cảnh quay và dữ liệu sang ChatGPT/Gemini để AI quan sát sản phẩm rồi viết kịch bản mới. App không tự suy đoán thông số hoặc công dụng.", style = MaterialTheme.typography.bodySmall)
-                            if (generatedSalesScript.isNotBlank()) {
-                                OutlinedTextField(generatedSalesScript, { generatedSalesScript = it }, Modifier.fillMaxWidth(), label = { Text("Kịch bản có thể chỉnh sửa") }, minLines = 7)
-                                OutlinedButton(onClick = {
-                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Kịch bản bán hàng", generatedSalesScript))
-                                }, modifier = Modifier.fillMaxWidth()) { Text("SAO CHÉP TOÀN BỘ KỊCH BẢN") }
-                            }
+                            OutlinedTextField(
+                                value = spokenTranscript,
+                                onValueChange = { spokenTranscript = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 4,
+                                label = { Text("Lời thoại gốc • có thể sửa hoặc dán thủ công") },
+                                placeholder = { Text("Nếu máy không nhận diện được lời thoại, bạn có thể dán nội dung tại đây. Phần ảnh và OCR vẫn dùng được.") }
+                            )
                             SalesAiHandoffCard(
                                 productBrief = listOf(
                                     "Tên sản phẩm: $productName",
@@ -515,6 +496,24 @@ fun SellerDashboard() {
                                 analysisFrames = salesAnalysisFrames,
                                 onAccept = { generatedSalesScript = it }
                             )
+                            Text("Chọn cách nói và thời lượng. Kịch bản ưu tiên dữ kiện đã xác nhận; không tự bịa giá, công dụng hay chứng nhận.", style = MaterialTheme.typography.bodySmall)
+                            OutlinedTextField(productName, { productName = it }, Modifier.fillMaxWidth(), label = { Text("Tên sản phẩm / mã hàng") })
+                            OutlinedTextField(targetCustomer, { targetCustomer = it }, Modifier.fillMaxWidth(), label = { Text("Khách hàng mục tiêu") })
+                            OutlinedTextField(customerProblem, { customerProblem = it }, Modifier.fillMaxWidth(), label = { Text("Vấn đề khách hàng đang gặp") })
+                            OutlinedTextField(productBenefits, { productBenefits = it }, Modifier.fillMaxWidth(), label = { Text("Lợi ích đã xác nhận") })
+                            OutlinedTextField(verifiedProductFacts, { verifiedProductFacts = it }, Modifier.fillMaxWidth(), label = { Text("Thông số / chất liệu / xuất xứ đã kiểm chứng") })
+                            OutlinedTextField(productOffer, { productOffer = it }, Modifier.fillMaxWidth(), label = { Text("Giá và ưu đãi (nếu có)") })
+                            OutlinedTextField(salesCallToAction, { salesCallToAction = it }, Modifier.fillMaxWidth(), label = { Text("Lời kêu gọi hành động") })
+                            OutlinedButton(onClick = { val all = SalesCopyStyle.values(); salesCopyStyle = all[(all.indexOf(salesCopyStyle) + 1) % all.size] }, modifier = Modifier.fillMaxWidth()) { Text("CÁCH NÓI: ${salesCopyStyle.label} • CHẠM ĐỂ ĐỔI") }
+                            OutlinedButton(onClick = { val all = SalesCopyLength.values(); salesCopyLength = all[(all.indexOf(salesCopyLength) + 1) % all.size] }, modifier = Modifier.fillMaxWidth()) { Text("THỜI LƯỢNG: ${salesCopyLength.label} • CHẠM ĐỂ ĐỔI") }
+                            if (generatedSalesScript.isNotBlank()) {
+                                OutlinedTextField(generatedSalesScript, { generatedSalesScript = it }, Modifier.fillMaxWidth(), label = { Text("Kịch bản có thể chỉnh sửa") }, minLines = 7)
+                                OutlinedButton(onClick = {
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Kịch bản bán hàng", generatedSalesScript))
+                                }, modifier = Modifier.fillMaxWidth()) { Text("SAO CHÉP TOÀN BỘ KỊCH BẢN") }
+                            }
+
                         }
                     }
                 }

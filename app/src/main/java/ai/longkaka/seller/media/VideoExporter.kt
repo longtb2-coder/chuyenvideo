@@ -9,6 +9,7 @@ import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
 import android.media.MediaMetadataRetriever
+import android.media.MediaExtractor
 import android.provider.MediaStore
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -230,6 +231,17 @@ class VideoExporter(private val context: Context) {
                 check(outputDuration > 0L && outputWidth > 0 && outputHeight > 0) {
                     "Tệp MP4 vừa dựng thiếu thời lượng hoặc khung hình. Không lưu tệp lỗi vào thư viện."
                 }
+                check(outputDuration + 1500L >= sourceDurationMs) {
+                    "Video xuất ra bị ngắn hơn video gốc bất thường. Đã hủy lưu để tránh nhận MP4 bị cắt cụt."
+                }
+                check(containsTrack(temp, "video/")) {
+                    "MP4 đầu ra không có luồng hình ảnh hợp lệ."
+                }
+                if (hasNarration) {
+                    check(containsTrack(temp, "audio/")) {
+                        "MP4 đã dựng nhưng không có luồng âm thanh giọng đọc. Hãy thử xuất lại."
+                    }
+                }
             } finally {
                 outputProbe.release()
             }
@@ -270,5 +282,18 @@ class VideoExporter(private val context: Context) {
             temp.delete()
             VideoTextBlur.release(blurSamples)
         }
+    }
+}
+ 
+private fun containsTrack(file: File, mimePrefix: String): Boolean {
+    val extractor = MediaExtractor()
+    return try {
+        extractor.setDataSource(file.absolutePath)
+        (0 until extractor.trackCount).any { index ->
+            extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)
+                ?.startsWith(mimePrefix) == true
+        }
+    } finally {
+        extractor.release()
     }
 }
