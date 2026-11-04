@@ -59,7 +59,7 @@ class VideoExporter(private val context: Context) {
             "Dữ liệu chỉnh sửa không khớp số đoạn chữ. Hãy quét lại video."
         }
         val temp = File(context.cacheDir, "seller_export_" + System.currentTimeMillis() + ".mp4")
-        val blurSamples = if (blurEnabled.any { it }) VideoTextBlur.prepare(context, source, overlays, covers, blurStrength) else emptyMap()
+        val blurSamples = if (blurEnabled.any { it }) withContext(Dispatchers.IO) { VideoTextBlur.prepare(context, source, overlays, covers, blurStrength) } else emptyMap()
         val overlay = object : CanvasOverlay(true) {
             private val coverPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = coverColor }
             private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -91,12 +91,14 @@ class VideoExporter(private val context: Context) {
                             ((observed.right - observed.left + 0.05f) * scaleX).coerceAtMost(1f - left),
                             ((observed.bottom - observed.top + 0.05f) * scaleY).coerceAtMost(1f - top))
                     } else if (item.observations.isEmpty()) c else return@forEachIndexed
-                    if (blurEnabled.getOrElse(index) { false }) {
-                        val patch = blurSamples[index]?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
-                        if (patch != null) {
-                            val destination = RectF(motionBox.left * canvas.width, motionBox.top * canvas.height,
-                                (motionBox.left + motionBox.width) * canvas.width, (motionBox.top + motionBox.height) * canvas.height)
-                            canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
+                    if (blurEnabled.any { it }) {
+                        if (blurEnabled.getOrElse(index) { false }) {
+                            val patch = blurSamples[index]?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
+                            if (patch != null) {
+                                val destination = RectF(motionBox.left * canvas.width, motionBox.top * canvas.height,
+                                    (motionBox.left + motionBox.width) * canvas.width, (motionBox.top + motionBox.height) * canvas.height)
+                                canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
+                            }
                         }
                         return@forEachIndexed
                     }
