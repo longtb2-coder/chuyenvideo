@@ -116,6 +116,8 @@ fun VieNeuNanoSetupCard(
                                 }
                                 val scriptFile = File(folder, "vieneu_script_${System.currentTimeMillis()}.txt")
                                 withContext(Dispatchers.IO) { scriptFile.writeText(text, Charsets.UTF_8) }
+                                withContext(Dispatchers.IO) { engine?.close() }
+                                engine = null
                                 val request = OneTimeWorkRequestBuilder<VieNeuSynthesisWorker>()
                                     .setInputData(workDataOf(
                                         VieNeuSynthesisWorker.KEY_TEXT_FILE to scriptFile.absolutePath,
