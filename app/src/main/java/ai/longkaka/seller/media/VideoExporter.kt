@@ -202,9 +202,17 @@ class VideoExporter(private val context: Context) {
             .addItem(sourceVideoItem)
             .build()
         val compositionSequences = mutableListOf(videoSequence)
-        if (originalAudioVolume > 0f) {
+        val sourceHasAudio = containsTrack(context, source, "audio/")
+        if (originalAudioVolume > 0f && sourceHasAudio) {
+            val sourceAudioGain = object : GainProcessor.GainProvider {
+                override fun getGainFactorAtSamplePosition(samplePosition: Long, sampleRate: Int): Float =
+                    originalAudioVolume
+
+                override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long =
+                    if (originalAudioVolume >= 1f) C.TIME_END_OF_SOURCE else C.TIME_UNSET
+            }
             val sourceAudioEffects = Effects(
-                listOf(GainProcessor { _ -> originalAudioVolume }),
+                listOf(GainProcessor(sourceAudioGain)),
                 emptyList()
             )
             val sourceAudioItem = EditedMediaItem.Builder(MediaItem.fromUri(source))
@@ -320,6 +328,20 @@ private fun containsTrack(file: File, mimePrefix: String): Boolean {
     val extractor = MediaExtractor()
     return try {
         extractor.setDataSource(file.absolutePath)
+        (0 until extractor.trackCount).any { index ->
+            extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)
+                ?.startsWith(mimePrefix) == true
+        }
+    } finally {
+        extractor.release()
+    }
+}
+
+
+private fun containsTrack(context: Context, uri: Uri, mimePrefix: String): Boolean {
+    val extractor = MediaExtractor()
+    return try {
+        extractor.setDataSource(context, uri, null)
         (0 until extractor.trackCount).any { index ->
             extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)
                 ?.startsWith(mimePrefix) == true
