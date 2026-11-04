@@ -47,20 +47,9 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     }
     DisposableEffect(exoPlayer) { onDispose { exoPlayer.release() } }
     val projectStore = remember(context) { EditorProjectStore(context) }
-    val translationDefaults = remember(overlays) { overlays.map { SavedLayerBox(it.left, it.top, (it.right-it.left).coerceAtLeast(.08f), (it.bottom-it.top).coerceAtLeast(.04f)) } }
-    val coverDefaults = remember(overlays) { overlays.map { item ->
-        val left = (item.left - .025f).coerceIn(0f, 1f)
-        val top = (item.top - .025f).coerceIn(0f, 1f)
-        SavedLayerBox(left, top,
-            (item.right - item.left + .05f).coerceAtLeast(.05f).coerceAtMost(1f - left),
-            (item.bottom - item.top + .05f).coerceAtLeast(.03f).coerceAtMost(1f - top))
-    } }
-    val savedProject = remember(videoUri, overlays) { projectStore.load(videoUri, overlays.size, translationDefaults, coverDefaults) }
-    var selected by remember(overlays) { mutableIntStateOf(0) }
-    var layer by remember { mutableStateOf(if (salesEditing) EditorLayer.COVER else EditorLayer.TRANSLATION) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
-    // If OCR finds no text, still provide one editable full-duration region for manual blur/subtitles.
+    // A manual full-video region is created when OCR returns no Chinese text.
     val editableOverlays = remember(overlays, durationMs) {
         if (overlays.isNotEmpty()) overlays
         else if (durationMs > 0L) listOf(
@@ -76,8 +65,26 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
             )
         ) else emptyList()
     }
-    var translations by remember(editableOverlays) { mutableStateOf((savedProject?.translations ?: translationDefaults).map { EditableOverlay(it.left,it.top,it.width,it.height) }) }
-    var covers by remember(editableOverlays) { mutableStateOf((savedProject?.covers ?: coverDefaults).map { EditableOverlay(it.left,it.top,it.width,it.height) }) }
+    // Defaults and saved project must use editableOverlays, not raw OCR overlays.
+    // Otherwise the manual region has zero-sized editor lists and cannot be exported.
+    val translationDefaults = remember(editableOverlays) {
+        editableOverlays.map { SavedLayerBox(it.left, it.top,
+            (it.right-it.left).coerceAtLeast(.08f), (it.bottom-it.top).coerceAtLeast(.04f)) }
+    }
+    val coverDefaults = remember(editableOverlays) {
+        editableOverlays.map { item ->
+            val left = (item.left - .025f).coerceIn(0f, 1f)
+            val top = (item.top - .025f).coerceIn(0f, 1f)
+            SavedLayerBox(left, top,
+                (item.right - item.left + .05f).coerceAtLeast(.05f).coerceAtMost(1f - left),
+                (item.bottom - item.top + .05f).coerceAtLeast(.03f).coerceAtMost(1f - top))
+        }
+    }
+    val savedProject = remember(videoUri, editableOverlays) {
+        projectStore.load(videoUri, editableOverlays.size, translationDefaults, coverDefaults)
+    }
+    var selected by remember(editableOverlays) { mutableIntStateOf(0) }
+    var layer by remember { mutableStateOf(if (salesEditing) EditorLayer.COVER else EditorLayer.TRANSLATION) }
     var coverEnabled by remember(editableOverlays) { mutableStateOf(savedProject?.coverEnabled ?: editableOverlays.map { it.sourceText.isNotBlank() }) }
     var coverColor by remember { mutableIntStateOf(savedProject?.coverColor ?: 0xFF111111.toInt()) }
     var coverAlpha by remember { mutableFloatStateOf(1f) }
