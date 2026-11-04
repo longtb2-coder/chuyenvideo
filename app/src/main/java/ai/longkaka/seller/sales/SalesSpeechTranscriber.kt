@@ -56,7 +56,7 @@ class SalesSpeechTranscriber(private val context: Context) {
                             onStatus("Đang tải mô hình nhận diện giọng nói…")
                         is DownloadStatus.DownloadFailed ->
                             throw download.e
-                        is DownloadStatus.DownloadCompleted ->
+                        DownloadStatus.DownloadCompleted ->
                             onStatus("Đã chuẩn bị mô hình. Đang nhận diện lời thoại…")
                         else -> Unit
                     }
