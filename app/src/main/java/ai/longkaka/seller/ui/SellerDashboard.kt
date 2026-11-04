@@ -75,6 +75,7 @@ fun SellerDashboard() {
     var isTranscribingSalesSpeech by remember { mutableStateOf(false) }
     var salesSpeechStatus by remember { mutableStateOf("Chưa nhận diện lời thoại gốc.") }
     var workflowMode by remember { mutableStateOf(SellerWorkflowMode.SALES_VIDEO) }
+    var workflowStep by remember { mutableIntStateOf(0) }
     var translatedOverlays by remember { mutableStateOf<List<OnScreenText>>(emptyList()) }
     var editedTranslations by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
     var selectedCategory by remember { mutableStateOf(ProductCategory.AUTO) }
@@ -175,10 +176,10 @@ fun SellerDashboard() {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { workflowMode = SellerWorkflowMode.SHORT_FILM }, modifier = Modifier.weight(1f)) {
+                    Button(onClick = { workflowMode = SellerWorkflowMode.SHORT_FILM; workflowStep = 0 }, modifier = Modifier.weight(1f)) {
                         Text(if (workflowMode == SellerWorkflowMode.SHORT_FILM) "✓ PHIM NGẮN" else "PHIM NGẮN")
                     }
-                    OutlinedButton(onClick = { workflowMode = SellerWorkflowMode.SALES_VIDEO }, modifier = Modifier.weight(1f)) {
+                    OutlinedButton(onClick = { workflowMode = SellerWorkflowMode.SALES_VIDEO; workflowStep = 0 }, modifier = Modifier.weight(1f)) {
                         Text(if (workflowMode == SellerWorkflowMode.SALES_VIDEO) "✓ BÁN HÀNG" else "VIDEO BÁN HÀNG")
                     }
                 }
@@ -191,6 +192,24 @@ fun SellerDashboard() {
                 )
             }
         }
+
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("QUY TRÌNH 3 BƯỚC", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("1. Nhập video", "2. Phân tích", "3. Hoàn thiện").forEachIndexed { index, label ->
+                        if (workflowStep == index) Button(onClick = { workflowStep = index }, modifier = Modifier.weight(1f)) { Text(label, style = MaterialTheme.typography.labelSmall) }
+                        else OutlinedButton(onClick = { workflowStep = index }, modifier = Modifier.weight(1f)) { Text(label, style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
+                Text(when (workflowStep) {
+                    0 -> "Bước 1/3 • Chọn hoặc tải video. Video đang chọn được giữ lại khi chuyển bước."
+                    1 -> "Bước 2/3 • Phân tích nội dung, kiểm tra chữ/lời thoại, chuẩn bị kịch bản và giọng đọc."
+                    else -> "Bước 3/3 • Kiểm tra vùng xử lý, phụ đề và hoàn thiện video."
+                }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (workflowStep == 0) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -256,6 +275,8 @@ fun SellerDashboard() {
                 )
             }
         }
+        }
+        if (workflowStep == 0) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -288,6 +309,8 @@ fun SellerDashboard() {
                 }
             }
         }
+        }
+        if (workflowStep == 1) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -342,17 +365,6 @@ fun SellerDashboard() {
                 }
                 Text(scanStatus, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (importedVideo != null) {
-                    VideoSubtitleEditor(
-                        videoUri = Uri.parse(importedVideo!!.contentUri),
-                        overlays = translatedOverlays,
-                        editedTexts = editedTranslations,
-                        onTextChange = { index, value -> editedTranslations = editedTranslations + (index to value) },
-                        salesEditing = workflowMode == SellerWorkflowMode.SALES_VIDEO,
-                        narrationFile = if (workflowMode == SellerWorkflowMode.SALES_VIDEO) narrationFile else null,
-                        narrationTimings = if (workflowMode == SellerWorkflowMode.SALES_VIDEO) narrationTimings else emptyList()
-                    )
-                }
                 if (workflowMode == SellerWorkflowMode.SALES_VIDEO) {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -508,11 +520,25 @@ fun SellerDashboard() {
                 )
             }
         }
+        }
+        if (workflowStep == 2) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("04  •  THÀNH PHẨM", style = MaterialTheme.typography.titleMedium)
                 ToolRow(Icons.Rounded.Movie, if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Dựng phim ngắn thuyết minh tiếng Việt" else "Biên tập video bán hàng", if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Khử chữ • phụ đề • giọng đọc • âm thanh gốc" else "Tỷ lệ dọc 9:16 • lợi ích • giá • CTA")
+                if (importedVideo != null) {
+                    VideoSubtitleEditor(
+                        videoUri = Uri.parse(importedVideo!!.contentUri),
+                        overlays = translatedOverlays,
+                        editedTexts = editedTranslations,
+                        onTextChange = { index, value -> editedTranslations = editedTranslations + (index to value) },
+                        salesEditing = workflowMode == SellerWorkflowMode.SALES_VIDEO,
+                        narrationFile = if (workflowMode == SellerWorkflowMode.SALES_VIDEO) narrationFile else null,
+                        narrationTimings = if (workflowMode == SellerWorkflowMode.SALES_VIDEO) narrationTimings else emptyList()
+                    )
+                }
+
                 Text(
                     if (importedVideo != null) "Trình biên tập đã mở. Nếu OCR không tìm thấy chữ, bạn vẫn có thể tự đặt vùng làm mờ và nhập phụ đề."
                     else "Nhập video để mở trình biên tập, làm mờ vùng chữ và chèn phụ đề.",
@@ -521,7 +547,14 @@ fun SellerDashboard() {
                 )
             }
         }
-        BackgroundScanCard(videoUri = importedVideo?.let { Uri.parse(it.contentUri) }, category = selectedCategory)
+        }
+        if (workflowStep == 1) BackgroundScanCard(videoUri = importedVideo?.let { Uri.parse(it.contentUri) }, category = selectedCategory)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            if (workflowStep > 0) OutlinedButton(onClick = { workflowStep -= 1 }, modifier = Modifier.weight(1f)) { Text("QUAY LẠI") }
+            Button(onClick = { if (workflowStep < 2) workflowStep += 1 },
+                enabled = (workflowStep == 0 || workflowStep == 1) && importedVideo != null,
+                modifier = Modifier.weight(1f)) { Text(if (workflowStep == 2) "ĐÃ ĐẾN BƯỚC CUỐI" else "TIẾP THEO") }
+        }
         AppUpdateCard()
         Spacer(Modifier.height(10.dp))
     }
