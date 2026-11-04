@@ -142,7 +142,8 @@ class VideoExporter(private val context: Context) {
             .setEffects(Effects(emptyList(), listOf(effect)))
             .setRemoveAudio(hasNarration)
         val sourceItem = sourceBuilder.build()
-        val videoSequence = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_VIDEO))
+        val sourceTrackTypes = if (hasNarration) setOf(C.TRACK_TYPE_VIDEO) else setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_VIDEO)
+        val videoSequence = EditedMediaItemSequence.Builder(sourceTrackTypes)
             .addItem(sourceItem)
             .build()
         val composition = if (hasNarration) {
