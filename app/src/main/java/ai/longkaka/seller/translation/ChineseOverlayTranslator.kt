@@ -98,10 +98,9 @@ class ChineseOverlayTranslator(private val context: Context) {
 
             for (index in 0 until frameCount) {
                 val timeMs = index * sampleIntervalMs
-                val bitmap = retriever.getFrameAtTime(
-                    timeMs * 1_000L,
-                    MediaMetadataRetriever.OPTION_CLOSEST
-                )
+                val bitmap = withContext(Dispatchers.IO) {
+                    retriever.getFrameAtTime(timeMs * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
+                }
                 if (bitmap == null) {
                     onProgress(((index + 1) * 100 / frameCount).coerceIn(0, 100))
                     continue
@@ -124,7 +123,7 @@ class ChineseOverlayTranslator(private val context: Context) {
                             // Match only a recent observation at approximately the same location.
                             // A new scene or a second copy elsewhere becomes a separate track.
                             val candidate = tracks
-                                .filter { it.normalizedText == normalized }
+                                .filter { it.normalizedText == normalized || textSimilarity(it.normalizedText, normalized) >= 0.78 }
                                 .filter { timeMs - it.lastTimeMs <= sampleIntervalMs * 4 }
                                 .filter { hypot((it.centerX - cx).toDouble(), (it.centerY - cy).toDouble()) <= 0.25 }
                                 .minByOrNull {
@@ -191,6 +190,24 @@ class ChineseOverlayTranslator(private val context: Context) {
  * This endpoint has a limited free quota and can be unavailable; callers always fall
  * back to the on-device ML Kit model. No API key or paid account is embedded in the app.
  */
+
+private fun textSimilarity(a: String, b: String): Double {
+    if (a.isEmpty() || b.isEmpty()) return if (a == b) 1.0 else 0.0
+    if (a == b) return 1.0
+    if (kotlin.math.abs(a.length - b.length) > maxOf(a.length, b.length) / 3) return 0.0
+    var previous = IntArray(b.length + 1) { it }
+    for (i in a.indices) {
+        val current = IntArray(b.length + 1)
+        current[0] = i + 1
+        for (j in b.indices) {
+            val cost = if (a[i] == b[j]) 0 else 1
+            current[j + 1] = minOf(current[j] + 1, previous[j + 1] + 1, previous[j] + cost)
+        }
+        previous = current
+    }
+    return 1.0 - previous[b.length].toDouble() / maxOf(a.length, b.length)
+}
+
 private fun isChineseHan(code: Int): Boolean =
     code in 0x3400..0x4DBF || code in 0x4E00..0x9FFF ||
         code in 0xF900..0xFAFF || code in 0x20000..0x2A6DF ||
