@@ -38,6 +38,13 @@ This branch contains an Android source foundation and the first functional video
 - The storyboard is cleared when a different video is selected so images from an older clip cannot be accidentally sent with a new project.
 - FileProvider grants read-only temporary access to the generated cache images. No API key or automatic upload is embedded.
 
+## Sales narration subtitles over the selected blur/cover region — implemented in source, not yet device-verified
+- The exporter now accepts the same VieNeu Nano chunk timings that were used to generate the narration audio.
+- During MP4 rendering, each caption is shown only during its generated speech interval.
+- In Sales mode, the user-selected OCR/blur region is used as the subtitle placement area. Other recognized Chinese text regions can still be blurred/covered without displaying the new narration text on every region.
+- If the selected OCR region is temporarily not visible, the caption can use its saved cover rectangle as a stable placement region.
+- The Movie workflow is unchanged; this timed narration-caption path is enabled only for Sales mode.
+
 ### Current limitation of this slice
 - This milestone sends sampled visual frames and recognized on-screen text. It does not yet transcribe the video's spoken audio, and it does not guarantee that every ChatGPT/Gemini app version accepts multiple image attachments from Android sharing.
 - The user must explicitly choose the destination app in the share sheet. The returned script still requires user review before narration.

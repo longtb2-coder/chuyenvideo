@@ -24,6 +24,7 @@ import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
 import ai.longkaka.seller.translation.OnScreenText
 import ai.longkaka.seller.translation.boundsAt
+import ai.longkaka.seller.speech.vieneu.VieNeuChunkTiming
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -52,7 +53,9 @@ class VideoExporter(private val context: Context) {
         narrationFile: File? = null,
         onProgress: (Int) -> Unit = {},
         blurEnabled: List<Boolean> = emptyList(),
-        blurStrength: Float = 12f
+        blurStrength: Float = 12f,
+        salesSubtitleTimings: List<VieNeuChunkTiming> = emptyList(),
+        salesSubtitleRegionIndex: Int = 0
     ): Uri = withContext(Dispatchers.Main.immediate) {
         require(source != Uri.EMPTY) { "Video đầu vào không hợp lệ." }
         require(translations.size == overlays.size && covers.size == overlays.size && coverEnabled.size == overlays.size) {
@@ -72,10 +75,13 @@ class VideoExporter(private val context: Context) {
 
             override fun onDraw(canvas: Canvas, presentationTimeUs: Long) {
                 val t = presentationTimeUs / 1000L
+                val activeSalesCaption = salesSubtitleTimings.firstOrNull { t >= it.startMs && t <= it.endMs }
                 overlays.forEachIndexed { index, item ->
-                    if (t < (item.timeMs - 500L).coerceAtLeast(0L) || t > item.lastTimeMs + 500L) return@forEachIndexed
+                    val trackVisible = t >= (item.timeMs - 500L).coerceAtLeast(0L) && t <= item.lastTimeMs + 500L
+                    val captionNeedsStaticRegion = salesSubtitleTimings.isNotEmpty() && index == salesSubtitleRegionIndex && activeSalesCaption != null
+                    if (!trackVisible && !captionNeedsStaticRegion) return@forEachIndexed
                     val c = covers[index]
-                    val observed = item.boundsAt(t)
+                    val observed = if (trackVisible) item.boundsAt(t) else null
                     val defaultLeft = (item.left - 0.025f).coerceAtLeast(0f)
                     val defaultTop = (item.top - 0.025f).coerceAtLeast(0f)
                     val defaultRight = (item.right + 0.025f).coerceAtMost(1f)
@@ -90,11 +96,11 @@ class VideoExporter(private val context: Context) {
                         RenderBox(left, top,
                             ((observed.right - observed.left + 0.05f) * scaleX).coerceAtMost(1f - left),
                             ((observed.bottom - observed.top + 0.05f) * scaleY).coerceAtMost(1f - top))
-                    } else if (item.observations.isEmpty()) c else return@forEachIndexed
+                    } else if (item.observations.isEmpty() || captionNeedsStaticRegion) c else return@forEachIndexed
                     val blurThisOverlay = blurEnabled.getOrElse(index) { false }
                     // Layer 1: blur the original pixels. Keep drawing below so the Vietnamese
                     // subtitle is composited on top of this blurred region in the same frame.
-                    if (blurThisOverlay) {
+                    if (blurThisOverlay && trackVisible) {
                         val patch = blurSamples[index]?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
                         if (patch != null) {
                             val destination = RectF(motionBox.left * canvas.width, motionBox.top * canvas.height,
@@ -120,7 +126,10 @@ class VideoExporter(private val context: Context) {
                     val top = b.top * canvas.height
                     val right = (b.left + b.width) * canvas.width
                     val bottom = (b.top + b.height) * canvas.height
-                    val text = editedTexts[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText
+                    val text = if (salesSubtitleTimings.isNotEmpty()) {
+                        if (index == salesSubtitleRegionIndex) activeSalesCaption?.text.orEmpty() else ""
+                    } else editedTexts[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText
+                    if (text.isBlank()) return@forEachIndexed
                     val availableHeight = (bottom - top).coerceAtLeast(1f)
                     val requestedTextSize = (textSizeSp * canvas.width / 360f).coerceIn(18f, 90f)
                     textPaint.textSize = minOf(requestedTextSize, (availableHeight / 1.18f).coerceAtLeast(8f))
