@@ -30,6 +30,19 @@ This branch contains an Android source foundation and the first functional video
 - Removing a library entry is deliberately separate from deleting the actual media file. No delete-file action is exposed yet.
 - `contentUri` is explicitly a MediaStore `content://` URI, not a filesystem path; future media processing must consume it as a URI or copy it to a controlled working file.
 
+## Sales-video visual storyboard handoff — implemented in source, not yet device-verified
+- A dedicated sampler extracts up to 8 evenly distributed frames from the imported sales video.
+- Frames are downscaled to a maximum edge of 1280 px and JPEG-compressed into app cache; the original video is never modified.
+- The app shares the storyboard images plus the product brief/OCR context and a structured sales-rewrite prompt to the user's selected ChatGPT/Gemini app through Android's share chooser.
+- The user can paste the returned sales script into the app; the accepted text continues into the existing VieNeu Nano narration workflow.
+- The storyboard is cleared when a different video is selected so images from an older clip cannot be accidentally sent with a new project.
+- FileProvider grants read-only temporary access to the generated cache images. No API key or automatic upload is embedded.
+
+### Current limitation of this slice
+- This milestone sends sampled visual frames and recognized on-screen text. It does not yet transcribe the video's spoken audio, and it does not guarantee that every ChatGPT/Gemini app version accepts multiple image attachments from Android sharing.
+- The user must explicitly choose the destination app in the share sheet. The returned script still requires user review before narration.
+- Compile, APK assembly and real-device share-flow testing have not yet been run for this change.
+
 ## Not implemented yet
 - Persistent local SQLite video library for imported-video metadata is implemented; full project/job persistence and migration tests remain pending.
 - Foreground long-running worker, notification, cancellation and retry/recovery.

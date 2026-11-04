@@ -50,6 +50,7 @@ import ai.longkaka.seller.sales.SalesProductBrief
 import ai.longkaka.seller.sales.SalesScriptBuilder
 import ai.longkaka.seller.sales.SalesCopyStyle
 import ai.longkaka.seller.sales.SalesCopyLength
+import ai.longkaka.seller.sales.SalesVideoFrameSampler
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -62,6 +63,10 @@ fun SellerDashboard() {
     val importer = remember(context) { VideoImportRepository(context.applicationContext) }
     val library = remember(context) { VideoLibraryRepository(context.applicationContext) }
     val overlayTranslator = remember(context) { ChineseOverlayTranslator(context.applicationContext) }
+    val salesFrameSampler = remember(context) { SalesVideoFrameSampler(context.applicationContext) }
+    var salesAnalysisFrames by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var isPreparingSalesFrames by remember { mutableStateOf(false) }
+    var salesFrameStatus by remember { mutableStateOf("Chưa trích xuất ảnh phân tích video.") }
     var workflowMode by remember { mutableStateOf(SellerWorkflowMode.SALES_VIDEO) }
     var translatedOverlays by remember { mutableStateOf<List<OnScreenText>>(emptyList()) }
     var editedTranslations by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
@@ -110,6 +115,8 @@ fun SellerDashboard() {
         library.save(video)
         videoLibrary = library.getAll()
         importedVideo = video
+        salesAnalysisFrames = emptyList()
+        salesFrameStatus = "Video đã thay đổi. Hãy trích xuất lại ảnh phân tích."
     }
 
     fun showError(error: Throwable) {
@@ -249,7 +256,11 @@ fun SellerDashboard() {
                 } else {
                     videoLibrary.forEach { video ->
                         OutlinedButton(
-                            onClick = { importedVideo = video },
+                            onClick = {
+                                importedVideo = video
+                                salesAnalysisFrames = emptyList()
+                                salesFrameStatus = "Video đã thay đổi. Hãy trích xuất lại ảnh phân tích."
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(Modifier.fillMaxWidth()) {
@@ -331,6 +342,31 @@ fun SellerDashboard() {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("TRỢ LÝ KỊCH BẢN BÁN HÀNG THÍCH ỨNG", style = MaterialTheme.typography.titleSmall)
+                            Text("Bước đầu: trích 8 cảnh tiêu biểu để ChatGPT/Gemini nhìn trực tiếp sản phẩm và diễn biến video.", style = MaterialTheme.typography.bodySmall)
+                            Button(
+                                onClick = {
+                                    val video = importedVideo
+                                    if (video != null && !isPreparingSalesFrames) {
+                                        scope.launch {
+                                            isPreparingSalesFrames = true
+                                            salesFrameStatus = "Đang trích xuất các cảnh tiêu biểu từ video…"
+                                            salesAnalysisFrames = emptyList()
+                                            try {
+                                                salesAnalysisFrames = salesFrameSampler.createStoryboard(Uri.parse(video.contentUri))
+                                                salesFrameStatus = if (salesAnalysisFrames.isEmpty()) "Không trích xuất được ảnh. Hãy thử video khác."
+                                                else "Đã chuẩn bị ${salesAnalysisFrames.size} ảnh theo thứ tự thời gian. AI sẽ nhận các ảnh này cùng prompt."
+                                            } catch (error: Throwable) {
+                                                salesFrameStatus = error.message ?: "Không thể phân tích hình ảnh video."
+                                            } finally {
+                                                isPreparingSalesFrames = false
+                                            }
+                                        }
+                                    }
+                                },
+                                enabled = importedVideo != null && !isPreparingSalesFrames,
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text(if (isPreparingSalesFrames) "ĐANG PHÂN TÍCH CẢNH…" else "PHÂN TÍCH 8 CẢNH TRONG VIDEO") }
+                            Text(salesFrameStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("Chọn cách nói và thời lượng. Kịch bản ưu tiên dữ kiện đã xác nhận; không tự bịa giá, công dụng hay chứng nhận.", style = MaterialTheme.typography.bodySmall)
                             OutlinedTextField(productName, { productName = it }, Modifier.fillMaxWidth(), label = { Text("Tên sản phẩm / mã hàng") })
                             OutlinedTextField(targetCustomer, { targetCustomer = it }, Modifier.fillMaxWidth(), label = { Text("Khách hàng mục tiêu") })
@@ -368,6 +404,7 @@ fun SellerDashboard() {
                                     "Nội dung đã dịch từ video: ${translatedOverlays.mapIndexed { index, item -> editedTranslations[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText }.filter { it.isNotBlank() }.joinToString(" | ")}"
                                 ).joinToString("\n"),
                                 currentDraft = generatedSalesScript,
+                                analysisFrames = salesAnalysisFrames,
                                 onAccept = { generatedSalesScript = it }
                             )
                         }
