@@ -365,47 +365,13 @@ fun SellerDashboard() {
                                     "Thông số đã kiểm chứng: $verifiedProductFacts",
                                     "Giá/ưu đãi do người bán cung cấp: $productOffer",
                                     "CTA: $salesCallToAction",
-                                    "Chữ nhận diện trong video: ${translatedOverlays.joinToString(" | ") { it.sourceText }}"
+                                    "Nội dung đã dịch từ video: ${translatedOverlays.mapIndexed { index, item -> editedTranslations[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText }.filter { it.isNotBlank() }.joinToString(" | ")}"
                                 ).joinToString("\\n"),
                                 currentDraft = generatedSalesScript,
                                 onAccept = { generatedSalesScript = it }
                             )
                         }
                     }
-                }
-                translatedOverlays.forEachIndexed { index, item ->
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Vùng chữ ${index + 1} • ${formatDuration(item.timeMs)} – ${formatDuration(item.lastTimeMs)}",
-                                style = MaterialTheme.typography.labelSmall)
-                            Text("Gốc: ${item.sourceText}", style = MaterialTheme.typography.bodySmall)
-                            OutlinedTextField(
-                                value = editedTranslations[index] ?: item.vietnameseText,
-                                onValueChange = { value -> editedTranslations = editedTranslations + (index to value) },
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Bản dịch tiếng Việt (có thể sửa)") }
-                            )
-                        }
-                    }
-                }
-                if (translatedOverlays.isNotEmpty()) {
-                    val subtitleCues = remember(translatedOverlays, editedTranslations, importedVideo) {
-                        importedVideo?.let { video ->
-                            VietnameseSubtitleTrack.fromOverlays(
-                                translatedOverlays, editedTranslations, video.durationMs
-                            )
-                        }.orEmpty()
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            pendingSubtitleText = VietnameseSubtitleTrack.toSrt(subtitleCues)
-                            subtitleSaver.launch("LONGKAKA_phude_tieng_viet.srt")
-                        },
-                        enabled = subtitleCues.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("XUẤT PHỤ ĐỀ TIẾNG VIỆT (.SRT)") }
-                    Text(subtitleExportStatus, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 ToolRow(Icons.Rounded.AutoAwesome,
                     if (workflowMode == SellerWorkflowMode.SHORT_FILM) "Xóa chữ Trung / làm mờ đúng vùng chữ" else "Phân tích lợi ích, điểm khác biệt và khách hàng mục tiêu",
