@@ -115,7 +115,7 @@ class VideoExporter(private val context: Context) {
         val sourceItem = EditedMediaItem.Builder(MediaItem.fromUri(source))
             .setEffects(Effects(emptyList(), listOf(effect)))
             .build()
-        val videoSequence = EditedMediaItemSequence.withAudioAndVideoFrom(listOf(sourceItem))
+        val videoSequence = EditedMediaItemSequence.Builder(listOf(sourceItem)).build()
         val composition = if (narrationFile != null && narrationFile.exists() && narrationFile.length() > 44L) {
             val durationRetriever = MediaMetadataRetriever()
             val durationMs = try {
@@ -128,10 +128,10 @@ class VideoExporter(private val context: Context) {
                 .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setEndPositionMs(durationMs).build())
                 .build()
             val narrationEdited = EditedMediaItem.Builder(narrationItem).setRemoveVideo(true).build()
-            val narrationSequence = EditedMediaItemSequence.withAudioFrom(listOf(narrationEdited))
-            Composition.Builder(videoSequence, narrationSequence).build()
+            val narrationSequence = EditedMediaItemSequence.Builder(listOf(narrationEdited)).setIsAudioOnly(true).build()
+            Composition.Builder(listOf(videoSequence, narrationSequence)).build()
         } else {
-            Composition.Builder(videoSequence).build()
+            Composition.Builder(listOf(videoSequence)).build()
         }
         try {
             suspendCancellableCoroutine<Unit> { continuation ->
