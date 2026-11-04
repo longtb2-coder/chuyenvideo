@@ -62,8 +62,8 @@ class ChineseOverlayTranslator(private val context: Context) {
         var bottom: Float,
         val observations: MutableList<TextRegionObservation> = mutableListOf()
     ) {
-        val centerX: Float get() = (left + right) / 2f
-        val centerY: Float get() = (top + bottom) / 2f
+        val centerX: Float get() = observations.lastOrNull()?.let { (it.left + it.right) / 2f } ?: (left + right) / 2f
+        val centerY: Float get() = observations.lastOrNull()?.let { (it.top + it.bottom) / 2f } ?: (top + bottom) / 2f
     }
 
     suspend fun scanAndTranslate(
