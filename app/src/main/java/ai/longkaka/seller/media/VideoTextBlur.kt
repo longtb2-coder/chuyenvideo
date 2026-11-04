@@ -36,7 +36,7 @@ internal object VideoTextBlur {
                 val patches = mutableListOf<Patch>()
                 var t = item.timeMs.coerceAtLeast(0L)
                 val end = item.lastTimeMs.coerceAtLeast(t)
-                while (t <= end && total < 1800) {
+                while (t <= end && total < 600) {
                     val observed = item.boundsAt(t)
                     val target = if (observed != null) {
                         val baseLeft = (item.left - .025f).coerceAtLeast(0f)
@@ -68,7 +68,7 @@ internal object VideoTextBlur {
                             }
                         }
                     }
-                    t += 750L
+                    t += 1_000L
                 }
                 if (patches.isNotEmpty()) result[index] = patches
             }
