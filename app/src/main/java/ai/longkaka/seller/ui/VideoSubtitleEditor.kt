@@ -83,12 +83,19 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     val savedProject = remember(videoUri, editableOverlays) {
         projectStore.load(videoUri, editableOverlays.size, translationDefaults, coverDefaults)
     }
+    var translations by remember(editableOverlays) {
+        mutableStateOf(savedProject?.translations ?: translationDefaults)
+    }
+    var covers by remember(editableOverlays) {
+        mutableStateOf(savedProject?.covers ?: coverDefaults)
+    }
     var selected by remember(editableOverlays) { mutableIntStateOf(0) }
     var layer by remember(editableOverlays, salesEditing) { mutableStateOf(if (editableOverlays.any { it.sourceText.isNotBlank() }) EditorLayer.BLUR else if (salesEditing) EditorLayer.COVER else EditorLayer.BLUR) }
     var coverEnabled by remember(editableOverlays) { mutableStateOf(savedProject?.coverEnabled ?: editableOverlays.map { it.sourceText.isNotBlank() }) }
     var coverColor by remember { mutableIntStateOf(savedProject?.coverColor ?: 0xFF111111.toInt()) }
     var coverAlpha by remember { mutableFloatStateOf(1f) }
-    // Chinese text detected by OCR is blurred by default; users can disable it per region.\n    var blurEnabled by remember(editableOverlays) { mutableStateOf(editableOverlays.map { it.sourceText.isNotBlank() }) }
+    // Chinese text detected by OCR is blurred by default; users can disable it per region.
+    var blurEnabled by remember(editableOverlays) { mutableStateOf(editableOverlays.map { it.sourceText.isNotBlank() }) }
     var blurStrength by remember { mutableFloatStateOf(14f) }
     var textSize by remember { mutableFloatStateOf(savedProject?.textSize ?: 16f) }
 
