@@ -137,13 +137,15 @@ class VideoExporter(private val context: Context) {
             }
         }
         val effect = OverlayEffect(listOf(overlay))
-        val sourceItem = EditedMediaItem.Builder(MediaItem.fromUri(source))
+        val hasNarration = narrationFile != null && narrationFile.exists() && narrationFile.length() > 44L
+        val sourceBuilder = EditedMediaItem.Builder(MediaItem.fromUri(source))
             .setEffects(Effects(emptyList(), listOf(effect)))
-            .build()
+            .setRemoveAudio(hasNarration)
+        val sourceItem = sourceBuilder.build()
         val videoSequence = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_VIDEO))
             .addItem(sourceItem)
             .build()
-        val composition = if (narrationFile != null && narrationFile.exists() && narrationFile.length() > 44L) {
+        val composition = if (hasNarration) {
             val durationRetriever = MediaMetadataRetriever()
             val durationMs = try {
                 durationRetriever.setDataSource(context, source)
