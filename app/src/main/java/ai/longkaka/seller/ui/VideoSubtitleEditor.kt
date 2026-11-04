@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
-private enum class EditorLayer { TRANSLATION, COVER }
+private enum class EditorLayer { TRANSLATION, COVER, BLUR }
 private data class EditableOverlay(val left: Float, val top: Float, val width: Float, val height: Float)
 
 @Composable
@@ -65,6 +65,8 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     var coverEnabled by remember(overlays) { mutableStateOf(savedProject?.coverEnabled ?: overlays.map { true }) }
     var coverColor by remember { mutableIntStateOf(savedProject?.coverColor ?: 0xFF111111.toInt()) }
     var coverAlpha by remember { mutableFloatStateOf(1f) }
+    var blurEnabled by remember(overlays) { mutableStateOf(overlays.map { false }) }
+    var blurStrength by remember { mutableFloatStateOf(14f) }
     var textSize by remember { mutableFloatStateOf(savedProject?.textSize ?: 16f) }
 
     LaunchedEffect(videoUri, translations, covers, if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile) {
@@ -95,7 +97,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 AndroidView(factory = { c -> PlayerView(c).apply { player = exoPlayer; useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT } },
                     update = { it.player = exoPlayer }, modifier = Modifier.fillMaxSize())
                 if (selected in overlays.indices) {
-                    if (layer == EditorLayer.COVER) {
+                    if (layer == EditorLayer.COVER || layer == EditorLayer.BLUR) {
                         val cover = covers[selected]
                         val item = overlays[selected]
                         val observed = item.boundsAt(positionMs)
@@ -107,7 +109,17 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                         val previewTop = observed?.let { (it.top - .025f + cover.top - baseTop).coerceIn(0f, 1f) } ?: cover.top
                         val previewWidth = observed?.let { ((it.right-it.left+.05f) * (cover.width/baseWidth).coerceIn(.5f,2.5f)).coerceAtMost(1f-previewLeft) } ?: cover.width
                         val previewHeight = observed?.let { ((it.bottom-it.top+.05f) * (cover.height/baseHeight).coerceIn(.5f,2.5f)).coerceAtMost(1f-previewTop) } ?: cover.height
-                        if (coverEnabled[selected]) {
+                        if (layer == EditorLayer.BLUR && blurEnabled[selected]) {
+                            Box(Modifier.offset { IntOffset((previewLeft*bw).roundToInt(), (previewTop*bh).roundToInt()) }
+                                .size((previewWidth*maxWidth.value).dp, (previewHeight*maxHeight.value).dp)
+                                .background(Color.White.copy(alpha=.22f), RoundedCornerShape(3.dp))
+                                .pointerInput(selected, cover) { detectDragGestures { change, drag ->
+                                    change.consume()
+                                    covers = covers.toMutableList().also { it[selected] = cover.copy(left=(cover.left+drag.x/bw).coerceIn(0f,1f-cover.width), top=(cover.top+drag.y/bh).coerceIn(0f,1f-cover.height)) }
+                                } }, contentAlignment=Alignment.Center) {
+                                Text("VÙNG LÀM MỜ", color=Color.White, fontSize=11.sp)
+                            }
+                        } else if (layer == EditorLayer.COVER && coverEnabled[selected]) {
                             Box(Modifier.offset { IntOffset((previewLeft*bw).roundToInt(), (previewTop*bh).roundToInt()) }
                                 .size((previewWidth*maxWidth.value).dp, (previewHeight*maxHeight.value).dp)
                                 .background(Color(coverColor).copy(alpha=coverAlpha), RoundedCornerShape(3.dp))
@@ -149,7 +161,8 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                             exporter.export(videoUri, overlays,
                                 translations.map { RenderBox(it.left,it.top,it.width,it.height) },
                                 covers.map { RenderBox(it.left,it.top,it.width,it.height) },
-                                if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile)
+                                if (salesEditing) coverEnabled else overlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile,
+                                blurEnabled = blurEnabled, blurStrength = blurStrength)
                         }.onSuccess { exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI" }
                          .onFailure { exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định") }
                         isExporting = false
@@ -175,12 +188,21 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     onValueChange={ onTextChange(selected,it) }, modifier=Modifier.fillMaxWidth(), label={ Text("Nội dung dịch tiếng Việt") })
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     if (salesEditing) {
-                        FilterChip(selected=true,onClick={layer=EditorLayer.COVER},label={Text("Khung che + phụ đề tiếng Việt")})
+                        FilterChip(selected=layer==EditorLayer.COVER,onClick={layer=EditorLayer.COVER},label={Text("Khung che + phụ đề")})
                     } else {
-                        FilterChip(selected=true,onClick={layer=EditorLayer.TRANSLATION},label={Text("Chỉnh phụ đề")})
+                        FilterChip(selected=layer==EditorLayer.TRANSLATION,onClick={layer=EditorLayer.TRANSLATION},label={Text("Chỉnh phụ đề")})
                     }
+                    FilterChip(selected=layer==EditorLayer.BLUR,onClick={layer=EditorLayer.BLUR},label={Text("Làm mờ chữ")})
                 }
-                if(salesEditing && layer==EditorLayer.COVER) {
+                if (layer == EditorLayer.BLUR) {
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Checkbox(checked=blurEnabled[selected],onCheckedChange={ v -> blurEnabled=blurEnabled.toMutableList().also { it[selected]=v } })
+                        Text("Bật làm mờ cho đoạn chữ này")
+                    }
+                    Text("Cường độ làm mờ: ${blurStrength.roundToInt()}")
+                    Slider(value=blurStrength,onValueChange={blurStrength=it},valueRange=3f..28f)
+                    Text("Chế độ này chỉ làm mờ vùng chữ gốc, không chèn phụ đề tiếng Việt. Vùng mờ sẽ bám theo chuyển động đã nhận diện.")
+                } else if(salesEditing && layer==EditorLayer.COVER) {
                     Text("Chiều rộng khung: ${(covers[selected].width*100).roundToInt()}%")
                     Slider(value=covers[selected].width,onValueChange={ v -> covers=covers.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,maxOf(.05f,1f-covers[selected].left))) } },valueRange=.05f..1f)
                     Text("Chiều cao khung: ${(covers[selected].height*100).roundToInt()}%")
@@ -206,7 +228,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     Text("Cỡ chữ dịch: ${textSize.roundToInt()} sp")
                     Slider(value=textSize,onValueChange={textSize=it},valueRange=10f..28f)
                 }
-                Text(if (salesEditing) "Kéo lớp trên video để đổi vị trí. Các chỉnh sửa được áp dụng khi xuất MP4." else "Kéo phụ đề trên video để đổi vị trí. Chỉ bản dịch đã sửa được ghi vào MP4; âm thanh và hình ảnh gốc được giữ nguyên.", style=MaterialTheme.typography.bodySmall)
+                Text(if (layer == EditorLayer.BLUR) "Kéo vùng làm mờ trên video để chỉnh vị trí; bật/tắt riêng cho từng đoạn chữ. Hiệu ứng làm mờ thật được kết xuất vào MP4." else if (salesEditing) "Kéo lớp trên video để đổi vị trí. Các chỉnh sửa được áp dụng khi xuất MP4." else "Kéo phụ đề trên video để đổi vị trí. Chỉ bản dịch đã sửa được ghi vào MP4; âm thanh và hình ảnh gốc được giữ nguyên.", style=MaterialTheme.typography.bodySmall)
             } else Text("Chưa có đoạn chữ để chỉnh. Hãy quét chữ Trung trước.", style=MaterialTheme.typography.bodySmall)
         }
     }
