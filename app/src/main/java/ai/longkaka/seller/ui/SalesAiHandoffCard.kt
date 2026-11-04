@@ -32,11 +32,11 @@ fun SalesAiHandoffCard(
 ) {
     val context = LocalContext.current
     var answer by remember { mutableStateOf("") }
-    val prompt = remember(productBrief, currentDraft) {
+    val prompt = remember(productBrief, currentDraft, analysisFrames.isNotEmpty()) {
         """
 Bạn là chuyên gia phân tích video sản phẩm và sáng tạo video bán hàng thương mại điện tử tại Việt Nam.
 
-QUAN TRỌNG: Các ảnh đính kèm là những khung hình được trích tuần tự từ video gốc. Hãy quan sát trực tiếp từng ảnh để hiểu sản phẩm, hình dáng, chi tiết, thao tác sử dụng, bối cảnh và diễn biến cảnh quay. Không được chỉ dựa vào OCR hoặc đoán tên sản phẩm. Nếu không nhìn rõ chi tiết nào, hãy nói rõ chưa xác định được.
+${if (analysisFrames.isNotEmpty()) "QUAN TRỌNG: Các ảnh đính kèm là những khung hình được trích tuần tự từ video gốc. Hãy quan sát trực tiếp từng ảnh để hiểu sản phẩm, hình dáng, chi tiết, thao tác sử dụng, bối cảnh và diễn biến cảnh quay. Không được chỉ dựa vào OCR hoặc đoán tên sản phẩm. Nếu không nhìn rõ chi tiết nào, hãy nói rõ chưa xác định được." else "LƯU Ý: Hiện chưa lấy được ảnh khung hình từ video. Bạn chỉ có dữ liệu OCR và lời thoại trong phần văn bản bên dưới. Không được giả vờ đã xem hình hoặc tự đoán sản phẩm; hãy nêu rõ điều gì chưa thể xác nhận và viết lời thoại thận trọng dựa trên dữ liệu có căn cứ."}
 
 DỮ LIỆU SẢN PHẨM DO NGƯỜI BÁN CUNG CẤP:
 $productBrief
@@ -66,29 +66,50 @@ Chỉ trả về lời thoại hoàn chỉnh để đưa vào tạo giọng đ�
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("AI QUAN SÁT SẢN PHẨM & VIẾT LỜI BÁN HÀNG", style = MaterialTheme.typography.titleSmall)
             Text(
-                if (analysisFrames.isEmpty()) "Hãy phân tích video để tạo ảnh cảnh quay trước. Sau đó gửi prompt kèm ảnh sang ChatGPT/Gemini."
-                else "Đã chuẩn bị ${analysisFrames.size} ảnh cảnh quay. Khi gửi sang ChatGPT/Gemini, AI sẽ xem sản phẩm trong ảnh, đối chiếu lời thoại, chữ OCR và thông tin bạn cung cấp rồi viết lời bán hàng mới.",
+                if (analysisFrames.isEmpty()) "Chưa có ảnh cảnh quay. Bạn vẫn có thể xem, sao chép và gửi prompt dạng văn bản; AI sẽ chỉ dựa trên OCR và lời thoại, không giả định đã xem video."
+                else "Đã chuẩn bị ${analysisFrames.size} ảnh cảnh quay. Prompt sẽ đi kèm ảnh, lời thoại, chữ OCR và dữ liệu sản phẩm để AI viết lời bán hàng mới.",
                 style = MaterialTheme.typography.bodySmall
             )
+            OutlinedTextField(
+                value = prompt,
+                onValueChange = {},
+                readOnly = true,
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 4,
+                maxLines = 8,
+                label = { Text("PROMPT GỬI CHATGPT / GEMINI") }
+            )
+            OutlinedButton(
+                onClick = {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Prompt viết lời thoại bán hàng", prompt))
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("SAO CHÉP PROMPT") }
             Button(
                 onClick = {
-                    val streams = ArrayList(analysisFrames)
-                    val send = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                        type = "image/jpeg"
-                        putExtra(Intent.EXTRA_TEXT, prompt)
-                        putParcelableArrayListExtra(Intent.EXTRA_STREAM, streams)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        if (streams.isNotEmpty()) {
+                    val send = if (analysisFrames.isNotEmpty()) {
+                        val streams = ArrayList(analysisFrames)
+                        Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                            type = "image/jpeg"
+                            putExtra(Intent.EXTRA_TEXT, prompt)
+                            putParcelableArrayListExtra(Intent.EXTRA_STREAM, streams)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             clipData = ClipData.newUri(context.contentResolver, "Ảnh phân tích video", streams.first())
                             streams.drop(1).forEach { clipData?.addItem(ClipData.Item(it)) }
                         }
+                    } else {
+                        Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, prompt)
+                        }
                     }
-                    context.startActivity(Intent.createChooser(send, "Gửi ảnh phân tích sang ChatGPT / Gemini"))
+                    context.startActivity(Intent.createChooser(send, "Gửi prompt sang ChatGPT / Gemini"))
                 },
-                enabled = analysisFrames.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("GỬI ${analysisFrames.size} ẢNH CẢNH QUAY + PROMPT SANG AI")
+                Text(if (analysisFrames.isEmpty()) "GỬI PROMPT VĂN BẢN SANG CHATGPT / GEMINI"
+                    else "GỬI ${analysisFrames.size} ẢNH + PROMPT SANG AI")
             }
             OutlinedButton(
                 onClick = {
