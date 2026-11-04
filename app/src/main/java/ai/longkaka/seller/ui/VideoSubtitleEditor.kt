@@ -47,10 +47,10 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     DisposableEffect(exoPlayer) { onDispose { exoPlayer.release() } }
     val projectStore = remember(context) { EditorProjectStore(context) }
     val translationDefaults = remember(overlays) { overlays.map { SavedLayerBox(it.left, it.top, (it.right-it.left).coerceAtLeast(.08f), (it.bottom-it.top).coerceAtLeast(.04f)) } }
-    val coverDefaults = remember(overlays) { overlays.map { SavedLayerBox((it.left-.01f).coerceAtLeast(0f), (it.top-.01f).coerceAtLeast(0f), (it.right-it.left+.02f).coerceAtMost(1f), (it.bottom-it.top+.02f).coerceAtMost(1f)) } }
+    val coverDefaults = remember(overlays) { overlays.map { SavedLayerBox((it.left-.025f).coerceAtLeast(0f), (it.top-.025f).coerceAtLeast(0f), (it.right-it.left+.05f).coerceAtMost(1f), (it.bottom-it.top+.05f).coerceAtMost(1f)) } }
     val savedProject = remember(videoUri, overlays) { projectStore.load(videoUri, overlays.size, translationDefaults, coverDefaults) }
     var selected by remember(overlays) { mutableIntStateOf(0) }
-    var layer by remember { mutableStateOf(EditorLayer.TRANSLATION) }
+    var layer by remember { mutableStateOf(if (salesEditing) EditorLayer.COVER else EditorLayer.TRANSLATION) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
     var translations by remember(overlays) { mutableStateOf((savedProject?.translations ?: translationDefaults).map { EditableOverlay(it.left,it.top,it.width,it.height) }) }
@@ -97,7 +97,11 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                                 .pointerInput(selected, cover) { detectDragGestures { change, drag ->
                                     change.consume()
                                     covers = covers.toMutableList().also { it[selected] = cover.copy(left=(cover.left+drag.x/bw).coerceIn(0f,1f-cover.width), top=(cover.top+drag.y/bh).coerceIn(0f,1f-cover.height)) }
-                                } })
+                                } }, contentAlignment=Alignment.Center) {
+                                Text(editedTexts[selected] ?: overlays[selected].vietnameseText,
+                                    color=Color.White, fontSize=textSize.sp, lineHeight=(textSize*1.15f).sp,
+                                    maxLines=3)
+                            }
                         }
                     } else {
                         val tr = translations[selected]
@@ -153,8 +157,11 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 OutlinedTextField(value=editedTexts[selected] ?: overlays[selected].vietnameseText,
                     onValueChange={ onTextChange(selected,it) }, modifier=Modifier.fillMaxWidth(), label={ Text("Nội dung dịch tiếng Việt") })
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected=layer==EditorLayer.TRANSLATION,onClick={layer=EditorLayer.TRANSLATION},label={Text("Chỉnh phụ đề")})
-                    if (salesEditing) FilterChip(selected=layer==EditorLayer.COVER,onClick={layer=EditorLayer.COVER},label={Text("Khung che")})
+                    if (salesEditing) {
+                        FilterChip(selected=true,onClick={layer=EditorLayer.COVER},label={Text("Khung che + phụ đề tiếng Việt")})
+                    } else {
+                        FilterChip(selected=true,onClick={layer=EditorLayer.TRANSLATION},label={Text("Chỉnh phụ đề")})
+                    }
                 }
                 if(salesEditing && layer==EditorLayer.COVER) {
                     Text("Chiều rộng khung: ${(covers[selected].width*100).roundToInt()}%")
@@ -174,7 +181,9 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     }
                     Text("Độ đậm nền: ${(coverAlpha*100).roundToInt()}%")
                     Slider(value=coverAlpha,onValueChange={coverAlpha=it},valueRange=.1f..1f)
-                } else {
+                    Text("Cỡ phụ đề trên khung: ${textSize.roundToInt()} sp")
+                    Slider(value=textSize,onValueChange={textSize=it},valueRange=10f..28f)
+                } else if (!salesEditing) {
                     Text("Chiều rộng vùng dịch: ${(translations[selected].width*100).roundToInt()}%")
                     Slider(value=translations[selected].width,onValueChange={ v -> translations=translations.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,maxOf(.05f,1f-translations[selected].left))) } },valueRange=.05f..1f)
                     Text("Chiều cao vùng dịch: ${(translations[selected].height*100).roundToInt()}%")
