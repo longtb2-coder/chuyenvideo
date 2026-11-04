@@ -202,8 +202,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     editableOverlays.forEachIndexed { index, item ->
                         OutlinedButton(onClick={ selected=index; exoPlayer.seekTo(item.timeMs) }, modifier=Modifier.fillMaxWidth()) {
                             Column(Modifier.fillMaxWidth()) {
-                                Text("Đoạn ${index+1} • ${clock(item.timeMs)}–${clock(item.lastTimeMs)}")
-                                Text(item.sourceText, style=MaterialTheme.typography.bodySmall, maxLines=1)
+                                Text("Vùng chữ ${index+1}", style=MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
