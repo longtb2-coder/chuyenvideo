@@ -366,7 +366,7 @@ fun SellerDashboard() {
                                     "Giá/ưu đãi do người bán cung cấp: $productOffer",
                                     "CTA: $salesCallToAction",
                                     "Nội dung đã dịch từ video: ${translatedOverlays.mapIndexed { index, item -> editedTranslations[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText }.filter { it.isNotBlank() }.joinToString(" | ")}"
-                                ).joinToString("\\n"),
+                                ).joinToString("\n"),
                                 currentDraft = generatedSalesScript,
                                 onAccept = { generatedSalesScript = it }
                             )
