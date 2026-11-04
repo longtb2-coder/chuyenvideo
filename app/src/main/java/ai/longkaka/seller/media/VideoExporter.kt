@@ -146,28 +146,40 @@ class VideoExporter(private val context: Context) {
                     } else editedTexts[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText
                     if (text.isBlank()) return@forEachIndexed
                     val availableHeight = (bottom - top).coerceAtLeast(1f)
-                    val requestedTextSize = (textSizeSp * canvas.width / 360f).coerceIn(18f, 90f)
-                    textPaint.textSize = minOf(requestedTextSize, (availableHeight / 1.18f).coerceAtLeast(8f))
                     val maxWidth = (right - left).coerceAtLeast(40f) - 12f
-                    val lines = mutableListOf<String>()
-                    var current = StringBuilder()
-                    text.split(Regex("\\s+")).forEach { word ->
-                        val candidate = if (current.isEmpty()) word else "$current $word"
-                        if (textPaint.measureText(candidate) > maxWidth && current.isNotEmpty()) {
-                            lines += current.toString()
-                            current = StringBuilder(word)
-                        } else current = StringBuilder(candidate)
+                    var fittedTextSize = (textSizeSp * canvas.width / 360f).coerceIn(18f, 90f)
+                    fun wrapAtCurrentSize(): List<String> {
+                        textPaint.textSize = fittedTextSize
+                        val wrapped = mutableListOf<String>()
+                        var current = StringBuilder()
+                        text.split(Regex("\\s+")).forEach { word ->
+                            val candidate = if (current.isEmpty()) word else "$current $word"
+                            if (textPaint.measureText(candidate) > maxWidth && current.isNotEmpty()) {
+                                wrapped += current.toString()
+                                current = StringBuilder(word)
+                            } else current = StringBuilder(candidate)
+                        }
+                        if (current.isNotEmpty()) wrapped += current.toString()
+                        return wrapped
                     }
-                    if (current.isNotEmpty()) lines += current.toString()
-                    val lineHeight = textPaint.textSize * 1.18f
-                    val visibleLines = lines.take(((bottom - top) / lineHeight).toInt().coerceAtLeast(1))
-                    val blockHeight = visibleLines.size * lineHeight
+                    var lines = wrapAtCurrentSize()
+                    // Fit every subtitle line inside its panel instead of clipping the last
+                    // lines when the caption is longer than the selected region.
+                    while (fittedTextSize > 7f && lines.size * fittedTextSize * 1.18f > availableHeight) {
+                        fittedTextSize = (fittedTextSize - 1f).coerceAtLeast(7f)
+                        lines = wrapAtCurrentSize()
+                    }
+                    if (lines.isNotEmpty() && lines.size * fittedTextSize * 1.18f > availableHeight) {
+                        fittedTextSize = (availableHeight / (lines.size * 1.18f)).coerceAtLeast(4f)
+                    }
+                    textPaint.textSize = fittedTextSize
+                    val lineHeight = fittedTextSize * 1.18f
+                    val blockHeight = lines.size * lineHeight
                     val centerX = (left + right) / 2f
-                    val firstBaseline = (top + (availableHeight - blockHeight) / 2f + textPaint.textSize)
-                        .coerceIn(top + minOf(textPaint.textSize, availableHeight), bottom)
+                    val firstBaseline = top + (availableHeight - blockHeight) / 2f + fittedTextSize
                     canvas.save()
                     canvas.clipRect(RectF(left, top, right, bottom))
-                    visibleLines.forEachIndexed { line, value ->
+                    lines.forEachIndexed { line, value ->
                         val y = firstBaseline + line * lineHeight
                         canvas.drawText(value, centerX, y, textBg)
                         canvas.drawText(value, centerX, y, textPaint)

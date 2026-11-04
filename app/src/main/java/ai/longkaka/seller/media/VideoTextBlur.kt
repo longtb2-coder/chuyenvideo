@@ -73,10 +73,14 @@ internal object VideoTextBlur {
                         // detected text bounds (with a tiny safety margin), clipped to it.
                         val padX = .006f
                         val padY = .006f
-                        val textLeft = max(region.left, observed.left - padX)
-                        val textTop = max(region.top, observed.top - padY)
-                        val textRight = min(region.left + region.width, observed.right + padX)
-                        val textBottom = min(region.top + region.height, observed.bottom + padY)
+                        val mappedTextLeft = region.left + (observed.left - baseLeft) * sx
+                        val mappedTextTop = region.top + (observed.top - baseTop) * sy
+                        val mappedTextRight = mappedTextLeft + (observed.right - observed.left) * sx
+                        val mappedTextBottom = mappedTextTop + (observed.bottom - observed.top) * sy
+                        val textLeft = max(region.left, mappedTextLeft - padX)
+                        val textTop = max(region.top, mappedTextTop - padY)
+                        val textRight = min(region.left + region.width, mappedTextRight + padX)
+                        val textBottom = min(region.top + region.height, mappedTextBottom + padY)
                         if (textRight > textLeft && textBottom > textTop) {
                             val target = RenderBox(textLeft, textTop, textRight - textLeft, textBottom - textTop)
                             val frame = retriever.getFrameAtTime(t * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
