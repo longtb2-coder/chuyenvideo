@@ -50,8 +50,10 @@ class VieNeuSynthesisWorker(
         return try {
             val directory = VieNeuNanoModelStore.ensureDownloaded(applicationContext) { name, index, count, _ ->
                 val percent = ((index - 1) * 100 / count).coerceIn(0, 95)
-                setProgress(workDataOf("progress" to percent, "status" to "Kiểm tra mô hình: $name"))
-                setForeground(foreground("Kiểm tra mô hình: $name", percent, 100))
+                kotlinx.coroutines.runBlocking {
+                    setProgress(workDataOf("progress" to percent, "status" to "Kiểm tra mô hình: $name"))
+                    setForeground(foreground("Kiểm tra mô hình: $name", percent, 100))
+                }
             }
             if (isStopped) return Result.failure(workDataOf(KEY_ERROR to "Tác vụ đã bị dừng."))
             engine = VieNeuNanoEngine(directory, threads = 2)
