@@ -1,0 +1,9 @@
+#include <jni.h>
+#include <cstdint>
+#include "sea_g2p.h"
+extern "C" JNIEXPORT jlong JNICALL Java_ai_longkaka_seller_speech_vieneu_SeaG2pNative_nativeOpen(JNIEnv* e,jobject,jstring p){if(!p)return 0;const char* s=e->GetStringUTFChars(p,nullptr);if(!s)return 0;sea_g2p* h=sea_g2p_open(s);e->ReleaseStringUTFChars(p,s);return reinterpret_cast<jlong>(h);}
+extern "C" JNIEXPORT void JNICALL Java_ai_longkaka_seller_speech_vieneu_SeaG2pNative_nativeClose(JNIEnv*,jobject,jlong h){sea_g2p_close(reinterpret_cast<sea_g2p*>(h));}
+extern "C" JNIEXPORT jstring JNICALL Java_ai_longkaka_seller_speech_vieneu_SeaG2pNative_nativePhonemize(JNIEnv* e,jobject,jlong h,jstring v,jboolean n){if(!v)return nullptr;const char* s=e->GetStringUTFChars(v,nullptr);if(!s)return nullptr;char* o=sea_g2p_phonemize(reinterpret_cast<sea_g2p*>(h),s,n?1:0);e->ReleaseStringUTFChars(v,s);if(!o)return nullptr;jstring r=e->NewStringUTF(o);sea_g2p_string_free(o);return r;}
+extern "C" JNIEXPORT jstring JNICALL Java_ai_longkaka_seller_speech_vieneu_SeaG2pNative_nativeNormalize(JNIEnv* e,jobject,jlong h,jstring v,jboolean n){if(!v)return nullptr;const char* s=e->GetStringUTFChars(v,nullptr);if(!s)return nullptr;char* o=sea_g2p_normalize(reinterpret_cast<sea_g2p*>(h),s,n?1:0);e->ReleaseStringUTFChars(v,s);if(!o)return nullptr;jstring r=e->NewStringUTF(o);sea_g2p_string_free(o);return r;}
+extern "C" JNIEXPORT jstring JNICALL Java_ai_longkaka_seller_speech_vieneu_SeaG2pNative_nativePunctuationNormalize(JNIEnv* e,jobject,jstring v){if(!v)return nullptr;const char* s=e->GetStringUTFChars(v,nullptr);if(!s)return nullptr;char* o=sea_g2p_punc_norm(s);e->ReleaseStringUTFChars(v,s);if(!o)return nullptr;jstring r=e->NewStringUTF(o);sea_g2p_string_free(o);return r;}
+extern "C" JNIEXPORT jstring JNICALL Java_ai_longkaka_seller_speech_vieneu_SeaG2pNative_nativeLastError(JNIEnv* e,jobject){const char* s=sea_g2p_last_error();return s?e->NewStringUTF(s):nullptr;}

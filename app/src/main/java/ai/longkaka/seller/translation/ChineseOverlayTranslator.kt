@@ -1,0 +1,393 @@
+package ai.longkaka.seller.translation
+
+import android.content.Context
+import android.media.MediaMetadataRetriever
+import android.net.Uri
+import android.graphics.Bitmap
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URLEncoder
+import java.net.URL
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.Translation
+import com.google.mlkit.nl.translate.TranslatorOptions
+import com.google.mlkit.common.model.DownloadConditions
+import kotlinx.coroutines.suspendCancellableCoroutine
+import com.google.android.gms.tasks.Task
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.math.hypot
+
+data class TextGlyphBox(val left: Float, val top: Float, val right: Float, val bottom: Float)
+
+/**
+ * Normalized content-frame region. OCR outside this region is ignored before tracking
+ * and translation, so status bars, borders, logos and unrelated screen text are not
+ * turned into subtitles. The editor can pass a custom region when the product frame
+ * is not centered.
+ */
+data class TextScanRegion(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+) {
+    init {
+        require(left in 0f..1f && top in 0f..1f && right in 0f..1f && bottom in 0f..1f)
+        require(right > left && bottom > top)
+    }
+
+    fun accepts(boxLeft: Float, boxTop: Float, boxRight: Float, boxBottom: Float): Boolean {
+        val boxWidth = (boxRight - boxLeft).coerceAtLeast(0f)
+        val boxHeight = (boxBottom - boxTop).coerceAtLeast(0f)
+        val area = boxWidth * boxHeight
+        if (area <= 0f) return false
+        val intersectionWidth = (minOf(right, boxRight) - maxOf(left, boxLeft)).coerceAtLeast(0f)
+        val intersectionHeight = (minOf(bottom, boxBottom) - maxOf(top, boxTop)).coerceAtLeast(0f)
+        return intersectionWidth * intersectionHeight / area >= 0.65f
+    }
+
+    companion object {
+        /** Default safe frame: leaves a small margin around the main video content. */
+        val MAIN_CONTENT = TextScanRegion(.04f, .06f, .96f, .94f)
+        val FULL_FRAME = TextScanRegion(0f, 0f, 1f, 1f)
+    }
+}
+
+data class TextRegionObservation(
+    val timeMs: Long,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val glyphs: List<TextGlyphBox> = emptyList()
+)
+
+data class OnScreenText(
+    val sourceText: String,
+    val vietnameseText: String,
+    val timeMs: Long,
+    val lastTimeMs: Long,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    /** Per-sample boxes retained for future frame-by-frame removal and motion tracking. */
+    val observations: List<TextRegionObservation> = emptyList()
+)
+
+/**
+ * Samples video frames, recognizes Chinese text and groups observations into separate
+ * time/position tracks. Identical text in two different screen locations is not merged.
+ * This stage does not itself erase pixels or render a replacement video.
+ */
+class ChineseOverlayTranslator(private val context: Context) {
+    private data class Track(
+        val normalizedText: String,
+        var displayText: String,
+        var firstTimeMs: Long,
+        var lastTimeMs: Long,
+        var left: Float,
+        var top: Float,
+        var right: Float,
+        var bottom: Float,
+        val observations: MutableList<TextRegionObservation> = mutableListOf()
+    ) {
+        val centerX: Float get() = observations.lastOrNull()?.let { (it.left + it.right) / 2f } ?: (left + right) / 2f
+        val centerY: Float get() = observations.lastOrNull()?.let { (it.top + it.bottom) / 2f } ?: (top + bottom) / 2f
+    }
+
+    suspend fun scanAndTranslate(
+        videoUri: Uri,
+        sampleIntervalMs: Long = 500L,
+        maxFrames: Int = 3_600,
+        category: ProductCategory = ProductCategory.AUTO,
+        scanRegion: TextScanRegion = TextScanRegion.MAIN_CONTENT,
+        onProgress: (Int) -> Unit = {}
+    ): List<OnScreenText> {
+        require(sampleIntervalMs >= 500L) { "Khoảng lấy mẫu phải từ 0,5 giây trở lên." }
+        require(maxFrames > 0) { "Số khung hình quét phải lớn hơn 0." }
+
+        val retriever = MediaMetadataRetriever()
+        val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
+        val translator = Translation.getClient(
+            TranslatorOptions.Builder()
+                .setSourceLanguage(TranslateLanguage.CHINESE)
+                .setTargetLanguage(TranslateLanguage.VIETNAMESE)
+                .build()
+        )
+        val tracks = mutableListOf<Track>()
+        try {
+            retriever.setDataSource(context, videoUri)
+            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            require(duration > 0L) { "Không đọc được thời lượng video." }
+            val frameCount = minOf(
+                ((duration + sampleIntervalMs - 1) / sampleIntervalMs).toInt().coerceAtLeast(1),
+                maxFrames
+            )
+            translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).awaitTask()
+
+            for (index in 0 until frameCount) {
+                val timeMs = index * sampleIntervalMs
+                val bitmap = withContext(Dispatchers.IO) {
+                    retriever.getFrameAtTime(timeMs * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
+                }
+                if (bitmap == null) {
+                    onProgress(((index + 1) * 100 / frameCount).coerceIn(0, 100))
+                    continue
+                }
+                try {
+                    val result = recognizer.process(InputImage.fromBitmap(bitmap, 0)).awaitTask()
+                    result.textBlocks.flatMap { it.lines }.forEach { line ->
+                        val text = line.text.trim()
+                        val containsChinese = containsChineseHan(text)
+                        val box = line.boundingBox
+                        if (containsChinese && box != null) {
+                            val left = (box.left.toFloat() / bitmap.width).coerceIn(0f, 1f)
+                            val top = (box.top.toFloat() / bitmap.height).coerceIn(0f, 1f)
+                            val right = (box.right.toFloat() / bitmap.width).coerceIn(left, 1f)
+                            val bottom = (box.bottom.toFloat() / bitmap.height).coerceIn(top, 1f)
+                            // Ignore text outside the main content frame before creating
+                            // tracks, translations or removal masks.
+                            if (!scanRegion.accepts(left, top, right, bottom)) return@forEach
+                            fun toGlyphBox(box: android.graphics.Rect?): TextGlyphBox? {
+                                if (box == null) return null
+                                return TextGlyphBox(
+                                    left = (box.left.toFloat() / bitmap.width).coerceIn(left, right),
+                                    top = (box.top.toFloat() / bitmap.height).coerceIn(top, bottom),
+                                    right = (box.right.toFloat() / bitmap.width).coerceIn(left, right),
+                                    bottom = (box.bottom.toFloat() / bitmap.height).coerceIn(top, bottom)
+                                ).takeIf { it.right > it.left && it.bottom > it.top }
+                            }
+                            // Symbol boxes are character-level. Element boxes are only a
+                            // fallback for recognizer results that do not expose symbols.
+                            val symbolGlyphs = line.elements.flatMap { element ->
+                                element.symbols.mapNotNull { symbol -> toGlyphBox(symbol.boundingBox) }
+                            }
+                            val glyphs = symbolGlyphs.ifEmpty {
+                                line.elements.mapNotNull { element -> toGlyphBox(element.boundingBox) }
+                            }
+                            val normalized = text.replace(Regex("\\s+"), "")
+                            val cx = (left + right) / 2f
+                            val cy = (top + bottom) / 2f
+
+                            // Match only a recent observation at approximately the same location.
+                            // A new scene or a second copy elsewhere becomes a separate track.
+                            val candidate = tracks
+                                .filter { it.normalizedText == normalized || textSimilarity(it.normalizedText, normalized) >= 0.78 }
+                                .filter { timeMs - it.lastTimeMs <= sampleIntervalMs * 4 }
+                                .filter { hypot((it.centerX - cx).toDouble(), (it.centerY - cy).toDouble()) <= 0.25 }
+                                .minByOrNull {
+                                    hypot((it.centerX - cx).toDouble(), (it.centerY - cy).toDouble())
+                                }
+
+                            if (candidate == null) {
+                                tracks += Track(
+                                    normalizedText = normalized,
+                                    displayText = text,
+                                    firstTimeMs = timeMs,
+                                    lastTimeMs = timeMs,
+                                    left = left,
+                                    top = top,
+                                    right = right,
+                                    bottom = bottom,
+                                    observations = mutableListOf(TextRegionObservation(timeMs, left, top, right, bottom, glyphs))
+                                )
+                            } else {
+                                candidate.lastTimeMs = timeMs
+                                candidate.left = minOf(candidate.left, left)
+                                candidate.top = minOf(candidate.top, top)
+                                candidate.right = maxOf(candidate.right, right)
+                                candidate.bottom = maxOf(candidate.bottom, bottom)
+                                candidate.observations += TextRegionObservation(timeMs, left, top, right, bottom, glyphs)
+                                if (text.length > candidate.displayText.length) candidate.displayText = text
+                            }
+                        }
+                    }
+                } finally {
+                    bitmap.recycle()
+                }
+                onProgress(((index + 1) * 100 / frameCount).coerceIn(0, 100))
+            }
+
+            return tracks.map { track ->
+                val translated = translateForProduct(track.displayText, category) { phrase ->
+                    translateOnline(phrase) ?: translator.translate(phrase).awaitTask()
+                }
+                OnScreenText(
+                    sourceText = track.displayText,
+                    vietnameseText = translated,
+                    timeMs = track.firstTimeMs,
+                    lastTimeMs = track.lastTimeMs,
+                    left = track.left,
+                    top = track.top,
+                    right = track.right,
+                    bottom = track.bottom,
+                    observations = track.observations.toList()
+                )
+            }
+        } finally {
+            recognizer.close()
+            translator.close()
+            retriever.release()
+        }
+    }
+}
+
+
+
+/**
+ * Internet-first translation using MyMemory's public Chinese-to-Vietnamese endpoint.
+ * This endpoint has a limited free quota and can be unavailable; callers always fall
+ * back to the on-device ML Kit model. No API key or paid account is embedded in the app.
+ */
+
+
+private fun containsChineseHan(text: String): Boolean {
+    var index = 0
+    while (index < text.length) {
+        val codePoint = Character.codePointAt(text, index)
+        if (isChineseHan(codePoint)) return true
+        index += Character.charCount(codePoint)
+    }
+    return false
+}
+
+private fun textSimilarity(a: String, b: String): Double {
+    if (a.isEmpty() || b.isEmpty()) return if (a == b) 1.0 else 0.0
+    if (a == b) return 1.0
+    if (kotlin.math.abs(a.length - b.length) > maxOf(a.length, b.length) / 3) return 0.0
+    var previous = IntArray(b.length + 1) { it }
+    for (i in a.indices) {
+        val current = IntArray(b.length + 1)
+        current[0] = i + 1
+        for (j in b.indices) {
+            val cost = if (a[i] == b[j]) 0 else 1
+            current[j + 1] = minOf(current[j] + 1, previous[j + 1] + 1, previous[j] + cost)
+        }
+        previous = current
+    }
+    return 1.0 - previous[b.length].toDouble() / maxOf(a.length, b.length)
+}
+
+private fun isChineseHan(code: Int): Boolean =
+    code in 0x3400..0x4DBF || code in 0x4E00..0x9FFF ||
+        code in 0xF900..0xFAFF || code in 0x20000..0x2A6DF ||
+        code in 0x2A700..0x2B73F || code in 0x2B740..0x2B81F ||
+        code in 0x2B820..0x2CEAF || code in 0x2CEB0..0x2EBEF ||
+        code in 0x30000..0x3134F || code in 0x2F800..0x2FA1F
+
+private suspend fun translateOnline(source: String): String? = withContext(Dispatchers.IO) {
+    var connection: HttpURLConnection? = null
+    try {
+        val encoded = URLEncoder.encode(source, "UTF-8")
+        val url = URL("https://api.mymemory.translated.net/get?q=$encoded&langpair=zh-CN|vi")
+        connection = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 8_000
+            readTimeout = 12_000
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("User-Agent", "LongkakaSellerAI/1.0")
+        }
+        if (connection.responseCode !in 200..299) return@withContext null
+        val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        val root = JSONObject(body)
+        val responseStatus = root.optInt("responseStatus", 0)
+        val translated = root.optJSONObject("responseData")
+            ?.optString("translatedText")
+            ?.trim()
+            .orEmpty()
+        if (responseStatus == 200 && translated.isNotBlank() &&
+            !translated.equals(source, ignoreCase = true) &&
+            !translated.contains("MYMEMORY WARNING")) translated else null
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    } finally {
+        connection?.disconnect()
+    }
+}
+
+private suspend fun translateForProduct(
+    source: String,
+    category: ProductCategory,
+    fallback: suspend (String) -> String
+): String {
+    val normalized = source.replace(Regex("\\s+"), "").trim()
+    val common = mapOf(
+        "限时抢购" to "Ưu đãi trong thời gian có hạn",
+        "买一送一" to "Mua 1 tặng 1",
+        "包邮" to "Miễn phí vận chuyển",
+        "正品保证" to "Cam kết hàng chính hãng",
+        "新品上市" to "Sản phẩm mới ra mắt",
+        "立即购买" to "Mua ngay",
+        "售后无忧" to "Yên tâm với dịch vụ hậu mãi",
+        "厂家直销" to "Bán trực tiếp từ nhà sản xuất",
+        "库存有限" to "Số lượng có hạn",
+        "热卖中" to "Đang bán chạy",
+        "爆款" to "Sản phẩm bán chạy",
+        "优惠价" to "Giá ưu đãi",
+        "全场包邮" to "Miễn phí vận chuyển toàn bộ đơn hàng",
+        "质量保证" to "Đảm bảo chất lượng"
+    )
+    val categoryTerms = when (category) {
+        ProductCategory.CLOTHING -> mapOf(
+            "显瘦" to "Tôn dáng, tạo cảm giác thon gọn", "修身" to "Ôm dáng",
+            "宽松" to "Dáng rộng thoải mái", "亲肤" to "Mềm mại, thân thiện với da",
+            "透气" to "Thoáng khí", "高腰" to "Cạp cao", "垂感" to "Độ rủ mềm mại",
+            "不起球" to "Hạn chế xù lông", "不褪色" to "Hạn chế phai màu",
+            "显腿长" to "Tạo hiệu ứng chân dài"
+        )
+        ProductCategory.COSMETICS -> mapOf(
+            "补水" to "Cấp nước", "保湿" to "Dưỡng ẩm", "提亮" to "Làm sáng da",
+            "控油" to "Kiểm soát dầu", "温和" to "Dịu nhẹ", "敏感肌" to "Da nhạy cảm",
+            "细腻" to "Mịn màng", "持久" to "Lâu trôi, bền màu"
+        )
+        ProductCategory.HOME -> mapOf(
+            "收纳" to "Lưu trữ, sắp xếp đồ đạc", "便携" to "Thiết kế tiện mang theo",
+            "防滑" to "Chống trượt", "耐用" to "Bền chắc", "易清洗" to "Dễ vệ sinh",
+            "承重" to "Khả năng chịu tải", "静音" to "Hoạt động êm ái"
+        )
+        ProductCategory.ELECTRONICS -> mapOf(
+            "续航" to "Thời lượng pin", "快充" to "Sạc nhanh", "高清" to "Độ phân giải cao",
+            "蓝牙" to "Bluetooth", "兼容" to "Tương thích", "功率" to "Công suất",
+            "智能" to "Thông minh"
+        )
+        ProductCategory.SHOES_BAGS -> mapOf(
+            "防水" to "Chống nước", "轻便" to "Nhẹ, tiện di chuyển", "耐磨" to "Chống mài mòn",
+            "透气" to "Thoáng khí", "容量" to "Dung tích / sức chứa"
+        )
+        ProductCategory.FOOD -> mapOf(
+            "口感" to "Hương vị và cảm giác khi thưởng thức", "新鲜" to "Tươi ngon",
+            "配料" to "Thành phần", "保质期" to "Hạn sử dụng", "无添加" to "Không thêm phụ gia"
+        )
+        ProductCategory.ACCESSORIES -> mapOf(
+            "轻便" to "Nhẹ, tiện mang theo", "防水" to "Chống nước",
+            "耐磨" to "Chống mài mòn", "精致" to "Thiết kế tinh tế"
+        )
+        else -> emptyMap()
+    }
+    val exact = categoryTerms[normalized] ?: common[normalized]
+    if (exact != null) return exact
+    return fallback(source)
+}
+
+private suspend fun <T> Task<T>.awaitTask(): T = suspendCancellableCoroutine { continuation ->
+    addOnSuccessListener { value ->
+        if (continuation.isActive) continuation.resume(value)
+    }
+    addOnFailureListener { error ->
+        if (continuation.isActive) continuation.resumeWithException(error)
+    }
+    addOnCanceledListener {
+        continuation.cancel()
+    }
+}
