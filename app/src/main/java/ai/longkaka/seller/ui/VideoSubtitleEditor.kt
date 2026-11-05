@@ -26,6 +26,8 @@ import ai.longkaka.seller.translation.OnScreenText
 import ai.longkaka.seller.translation.boundsAt
 import ai.longkaka.seller.media.VideoExporter
 import ai.longkaka.seller.media.RenderBox
+import ai.longkaka.seller.media.VideoRecoveryAdvisor
+import ai.longkaka.seller.media.VideoRecoveryAdvice
 import ai.longkaka.seller.speech.vieneu.VieNeuChunkTiming
 import java.io.File
 import kotlinx.coroutines.launch
@@ -42,6 +44,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     var isExporting by remember { mutableStateOf(false) }
     var exportStatus by remember { mutableStateOf("Chưa xuất video.") }
     var exportProgress by remember { mutableIntStateOf(0) }
+    var recoveryAdvice by remember { mutableStateOf<VideoRecoveryAdvice?>(null) }
     val exporter = remember(context) { VideoExporter(context.applicationContext) }
     val exoPlayer = remember(videoUri) {
         ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(videoUri)); prepare(); playWhenReady = false }
@@ -209,6 +212,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     isExporting = true
                     exportProgress = 0
                     exportStatus = "Đang chuẩn bị xuất video…"
+                    recoveryAdvice = null
                     scope.launch {
                         runCatching {
                             exporter.export(videoUri, editableOverlays,
@@ -220,8 +224,11 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                                 salesSubtitleTimings = if (salesEditing) narrationTimings else emptyList(),
                                 salesSubtitleRegionIndex = selected,
                                 onProgress = { exportProgress = it.coerceIn(0, 100) })
-                        }.onSuccess { exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI" }
-                         .onFailure { exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định") }
+                        }.onSuccess { exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI"; recoveryAdvice = null }
+                         .onFailure {
+                             recoveryAdvice = VideoRecoveryAdvisor.diagnose(it)
+                             exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định")
+                         }
                         isExporting = false
                     }
                 }
@@ -271,6 +278,19 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 color = if (exportStatus.startsWith("Lỗi")) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant
             )
+            recoveryAdvice?.let { advice ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("TỰ CHẨN ĐOÁN LỖI: ${advice.title}", style = MaterialTheme.typography.titleSmall)
+                        Text(advice.explanation, style = MaterialTheme.typography.bodySmall)
+                        Text("Cách xử lý: ${advice.nextStep}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
             if (editableOverlays.isNotEmpty()) {
                 Text("CÁC ĐOẠN CHỮ ĐÃ NHẬN DIỆN", style=MaterialTheme.typography.labelLarge)
                 Column(Modifier.heightIn(max=160.dp).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(4.dp)) {
