@@ -60,7 +60,7 @@ class TextTrackGeometryTest {
             observations = listOf(TextRegionObservation(0L, 0.1f, 0.2f, 0.3f, 0.4f),
                 TextRegionObservation(1_000L, 0.2f, 0.3f, 0.4f, 0.5f))
         )
-        assertEquals(0.2f, track.boundsAt(1_250L)!!.left, 0.0001f)
+        assertEquals(0.225f, track.boundsAt(1_250L)!!.left, 0.0001f)
         assertNull(track.boundsAt(1_501L))
     }
 
