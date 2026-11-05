@@ -157,12 +157,12 @@ fun SellerDashboard() {
             scope.launch {
                 isImporting = true
                 importProgress = 0
-                importStatus = "Đang lưu video trực tiếp vào thư mục Movies/LONGKAKA SELLER AI trên điện thoại…"
+                importStatus = "Đang mở video gốc trên điện thoại, không sao chép…"
                 try {
                     val result = importer.importFromUri(uri) { importProgress = it }
                     rememberImported(result)
                     importProgress = 100
-                    importStatus = "Đã nhận video từ điện thoại thành công."
+                    importStatus = "Đã mở video gốc thành công. Không tạo bản sao."
                 } catch (error: Throwable) {
                     showError(error)
                 } finally {
@@ -290,13 +290,13 @@ fun SellerDashboard() {
                                 style = MaterialTheme.typography.bodySmall)
                             Text("Dung lượng: ${formatBytes(video.sizeBytes)}",
                                 style = MaterialTheme.typography.bodySmall)
-                            Text("Đã lưu tại Movies/LONGKAKA SELLER AI trong bộ nhớ điện thoại",
+                            Text("Đang dùng trực tiếp video gốc trong bộ nhớ điện thoại",
                                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
                 Text(
-                    "Video nhập từ máy hoặc tải từ link trực tiếp sẽ được lưu vào thư mục Movies/LONGKAKA SELLER AI để dễ tìm trong ứng dụng Tệp/Thư viện. Không giới hạn cứng dung lượng; việc tải phụ thuộc dung lượng trống thực tế của điện thoại. Link trang TikTok/Facebook/Shopee/Douyin thường không phải link tệp trực tiếp và có thể cần đăng nhập hoặc bị nền tảng giới hạn. Khi đó, hãy lưu video bằng chức năng hợp lệ của nền tảng rồi chọn tệp ở đây. Không xóa watermark hay dấu bản quyền.",
+                    "Video chọn từ điện thoại được app mở và sử dụng trực tiếp qua quyền truy cập tệp, không chép thêm một bản video vào bộ nhớ. Chỉ khi bạn dán link video trực tiếp, app mới tải và tạo một tệp mới trong thư mục Movies/LONGKAKA SELLER AI. Link trang TikTok/Facebook/Shopee/Douyin thường không phải link tệp trực tiếp; hãy lưu video bằng chức năng hợp lệ của nền tảng rồi chọn tệp ở đây. Không xóa watermark hay dấu bản quyền.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
