@@ -262,21 +262,32 @@ class VideoExporter(private val context: Context) {
                             ?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
                             ?.takeIf { kotlin.math.abs(it.timeMs - t) <= 750L }
                         if (patch != null) {
-                            // Blur the entire selected replacement area, then render the
-                            // Vietnamese subtitle into that exact moving rectangle below.
-                            // The patch bitmap contains only the glyph-shaped alpha mask
-                            // for its own sampled OCR position. Draw it at that exact geometry;
-                            // stretching it over the full subtitle panel would misalign the mask.
-                            // Reposition the sampled glyph-shaped restoration patch to the
-                            // current OCR motion box. Keeping its original sample coordinates
-                            // caused moving text to leave uncovered trails.
-                            val destination = RectF(
-                                motionBox.left * canvas.width,
-                                motionBox.top * canvas.height,
-                                (motionBox.left + motionBox.width) * canvas.width,
-                                (motionBox.top + motionBox.height) * canvas.height
-                            )
-                            canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
+                            // The patch is a pixel-space restoration sample with a glyph-shaped
+                            // alpha mask. Never stretch it to the subtitle panel: that distorts
+                            // glyph geometry and drags background texture into a smear.
+                            // Translate only by the OCR track's measured motion since the sample;
+                            // retain the patch's original width and height.
+                            val sampledObservation = item.observations
+                                .minByOrNull { kotlin.math.abs(it.timeMs - patch.timeMs) }
+                            val deltaX = if (observed != null && sampledObservation != null) {
+                                observed.left - sampledObservation.left
+                            } else 0f
+                            val deltaY = if (observed != null && sampledObservation != null) {
+                                observed.top - sampledObservation.top
+                            } else 0f
+                            val patchLeft = (patch.box.left + deltaX).coerceIn(0f, 1f)
+                            val patchTop = (patch.box.top + deltaY).coerceIn(0f, 1f)
+                            val patchRight = (patchLeft + patch.box.width).coerceAtMost(1f)
+                            val patchBottom = (patchTop + patch.box.height).coerceAtMost(1f)
+                            if (patchRight > patchLeft && patchBottom > patchTop) {
+                                val destination = RectF(
+                                    patchLeft * canvas.width,
+                                    patchTop * canvas.height,
+                                    patchRight * canvas.width,
+                                    patchBottom * canvas.height
+                                )
+                                canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
+                            }
                         }
                     }
                     // A blur-mode subtitle sits directly on the blurred area; do not add
