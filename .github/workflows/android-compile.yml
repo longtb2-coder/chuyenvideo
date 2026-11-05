@@ -1,7 +1,7 @@
 name: Android APK build verification
 on:
   push:
-    branches: [ "foundation/architecture", "feature/independent-text-blur" ]
+    branches: [ "foundation/architecture", "feature/independent-text-blur", "feature/temporal-text-restoration" ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
