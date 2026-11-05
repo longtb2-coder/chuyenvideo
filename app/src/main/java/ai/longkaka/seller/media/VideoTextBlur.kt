@@ -12,10 +12,11 @@ import org.opencv.core.Mat
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import kotlin.math.ceil
-import kotlin.math.max
-import kotlin.math.min
 
-/** Blur only OCR text pixels that intersect the user-selected region. */
+/**
+ * Builds blurred patches for the complete user-selected subtitle region, not only
+ * the glyph pixels. This guarantees the replacement caption has a clean surface.
+ */
 internal object VideoTextBlur {
     data class Patch(val timeMs: Long, val box: RenderBox, val bitmap: Bitmap)
 
@@ -38,67 +39,56 @@ internal object VideoTextBlur {
 
         val retriever = MediaMetadataRetriever()
         val result = linkedMapOf<Int, MutableList<Patch>>()
-        // Allocate samples across every OCR region. Do not let early regions consume a
-        // global cap and leave the end of a long video using stale blur frames.
-        val perRegionBudget = (1200 / active.size).coerceAtLeast(2)
+        // Keep memory bounded on phones: distribute at most 160 source-frame patches
+        // over all OCR tracks, while ensuring every track receives at least two samples.
+        val perRegionBudget = (160 / active.size).coerceAtLeast(2)
         try {
             retriever.setDataSource(context, source)
             active.forEach { index ->
                 val item = overlays[index]
-                val selectedBox = boxes[index]
+                val selected = boxes[index]
                 val duration = (item.lastTimeMs - item.timeMs).coerceAtLeast(1L)
                 val rawInterval = ceil(duration.toDouble() / perRegionBudget).toLong()
                 val interval = (ceil(rawInterval / 100.0).toLong() * 100L).coerceAtLeast(100L)
                 val patches = mutableListOf<Patch>()
-                var t = item.timeMs.coerceAtLeast(0L)
-                val end = item.lastTimeMs.coerceAtLeast(t)
-                while (t <= end) {
-                    val observed = item.boundsAt(t)
+                var time = item.timeMs.coerceAtLeast(0L)
+                val end = item.lastTimeMs.coerceAtLeast(time)
+                while (time <= end) {
+                    val observed = item.boundsAt(time)
                     if (observed != null) {
+                        // Match the editor/export motion transform exactly so the blurred
+                        // patch and its replacement subtitle share the same moving region.
                         val baseLeft = (item.left - .025f).coerceAtLeast(0f)
                         val baseTop = (item.top - .025f).coerceAtLeast(0f)
                         val baseWidth = (item.right - item.left + .05f).coerceAtLeast(.01f)
                         val baseHeight = (item.bottom - item.top + .05f).coerceAtLeast(.01f)
-                        val sx = (selectedBox.width / baseWidth).coerceIn(.5f, 2.5f)
-                        val sy = (selectedBox.height / baseHeight).coerceIn(.5f, 2.5f)
-                        val regionLeft = (observed.left - .025f + selectedBox.left - baseLeft).coerceIn(0f, 1f)
-                        val regionTop = (observed.top - .025f + selectedBox.top - baseTop).coerceIn(0f, 1f)
+                        val scaleX = (selected.width / baseWidth).coerceIn(.5f, 2.5f)
+                        val scaleY = (selected.height / baseHeight).coerceIn(.5f, 2.5f)
+                        val left = (observed.left - .025f + selected.left - baseLeft).coerceIn(0f, 1f)
+                        val top = (observed.top - .025f + selected.top - baseTop).coerceIn(0f, 1f)
                         val region = RenderBox(
-                            regionLeft,
-                            regionTop,
-                            ((observed.right - observed.left + .05f) * sx).coerceAtMost(1f - regionLeft),
-                            ((observed.bottom - observed.top + .05f) * sy).coerceAtMost(1f - regionTop)
+                            left,
+                            top,
+                            ((observed.right - observed.left + .05f) * scaleX).coerceAtMost(1f - left),
+                            ((observed.bottom - observed.top + .05f) * scaleY).coerceAtMost(1f - top)
                         )
-                        // The selected box is only a boundary. The actual blur patch is the
-                        // detected text bounds (with a tiny safety margin), clipped to it.
-                        val padX = .006f
-                        val padY = .006f
-                        val mappedTextLeft = region.left + .025f * sx
-                        val mappedTextTop = region.top + .025f * sy
-                        val mappedTextRight = mappedTextLeft + (observed.right - observed.left) * sx
-                        val mappedTextBottom = mappedTextTop + (observed.bottom - observed.top) * sy
-                        val textLeft = max(region.left, mappedTextLeft - padX)
-                        val textTop = max(region.top, mappedTextTop - padY)
-                        val textRight = min(region.left + region.width, mappedTextRight + padX)
-                        val textBottom = min(region.top + region.height, mappedTextBottom + padY)
-                        if (textRight > textLeft && textBottom > textTop) {
-                            val target = RenderBox(textLeft, textTop, textRight - textLeft, textBottom - textTop)
-                            val frame = retriever.getFrameAtTime(t * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
+                        if (region.width > 0f && region.height > 0f) {
+                            val frame = retriever.getFrameAtTime(time * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
                             if (frame != null) {
                                 try {
-                                    val x = (target.left * frame.width).toInt().coerceIn(0, frame.width - 1)
-                                    val y = (target.top * frame.height).toInt().coerceIn(0, frame.height - 1)
-                                    val w = (target.width * frame.width).toInt().coerceAtLeast(1).coerceAtMost(frame.width - x)
-                                    val h = (target.height * frame.height).toInt().coerceAtLeast(1).coerceAtMost(frame.height - y)
-                                    val crop = Bitmap.createBitmap(frame, x, y, w, h)
+                                    val x = (region.left * frame.width).toInt().coerceIn(0, frame.width - 1)
+                                    val y = (region.top * frame.height).toInt().coerceIn(0, frame.height - 1)
+                                    val width = (region.width * frame.width).toInt().coerceAtLeast(1).coerceAtMost(frame.width - x)
+                                    val height = (region.height * frame.height).toInt().coerceAtLeast(1).coerceAtMost(frame.height - y)
+                                    val crop = Bitmap.createBitmap(frame, x, y, width, height)
                                     try {
                                         val actualBox = RenderBox(
                                             x.toFloat() / frame.width,
                                             y.toFloat() / frame.height,
-                                            w.toFloat() / frame.width,
-                                            h.toFloat() / frame.height
+                                            width.toFloat() / frame.width,
+                                            height.toFloat() / frame.height
                                         )
-                                        patches += Patch(t, actualBox, gaussianBlur(crop, strength))
+                                        patches += Patch(time, actualBox, gaussianBlur(crop, strength))
                                     } finally {
                                         crop.recycle()
                                     }
@@ -108,8 +98,8 @@ internal object VideoTextBlur {
                             }
                         }
                     }
-                    if (end - t < interval) break
-                    t += interval
+                    if (end - time < interval) break
+                    time += interval
                 }
                 if (patches.isNotEmpty()) result[index] = patches
             }
