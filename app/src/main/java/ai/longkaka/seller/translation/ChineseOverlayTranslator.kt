@@ -26,6 +26,40 @@ import kotlin.math.hypot
 
 data class TextGlyphBox(val left: Float, val top: Float, val right: Float, val bottom: Float)
 
+/**
+ * Normalized content-frame region. OCR outside this region is ignored before tracking
+ * and translation, so status bars, borders, logos and unrelated screen text are not
+ * turned into subtitles. The editor can pass a custom region when the product frame
+ * is not centered.
+ */
+data class TextScanRegion(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+) {
+    init {
+        require(left in 0f..1f && top in 0f..1f && right in 0f..1f && bottom in 0f..1f)
+        require(right > left && bottom > top)
+    }
+
+    fun accepts(boxLeft: Float, boxTop: Float, boxRight: Float, boxBottom: Float): Boolean {
+        val boxWidth = (boxRight - boxLeft).coerceAtLeast(0f)
+        val boxHeight = (boxBottom - boxTop).coerceAtLeast(0f)
+        val area = boxWidth * boxHeight
+        if (area <= 0f) return false
+        val intersectionWidth = (minOf(right, boxRight) - maxOf(left, boxLeft)).coerceAtLeast(0f)
+        val intersectionHeight = (minOf(bottom, boxBottom) - maxOf(top, boxTop)).coerceAtLeast(0f)
+        return intersectionWidth * intersectionHeight / area >= 0.65f
+    }
+
+    companion object {
+        /** Default safe frame: leaves a small margin around the main video content. */
+        val MAIN_CONTENT = TextScanRegion(.04f, .06f, .96f, .94f)
+        val FULL_FRAME = TextScanRegion(0f, 0f, 1f, 1f)
+    }
+}
+
 data class TextRegionObservation(
     val timeMs: Long,
     val left: Float,
@@ -74,6 +108,7 @@ class ChineseOverlayTranslator(private val context: Context) {
         sampleIntervalMs: Long = 500L,
         maxFrames: Int = 3_600,
         category: ProductCategory = ProductCategory.AUTO,
+        scanRegion: TextScanRegion = TextScanRegion.MAIN_CONTENT,
         onProgress: (Int) -> Unit = {}
     ): List<OnScreenText> {
         require(sampleIntervalMs >= 500L) { "Khoảng lấy mẫu phải từ 0,5 giây trở lên." }
@@ -119,6 +154,9 @@ class ChineseOverlayTranslator(private val context: Context) {
                             val top = (box.top.toFloat() / bitmap.height).coerceIn(0f, 1f)
                             val right = (box.right.toFloat() / bitmap.width).coerceIn(left, 1f)
                             val bottom = (box.bottom.toFloat() / bitmap.height).coerceIn(top, 1f)
+                            // Ignore text outside the main content frame before creating
+                            // tracks, translations or removal masks.
+                            if (!scanRegion.accepts(left, top, right, bottom)) return@forEach
                             fun toGlyphBox(box: android.graphics.Rect?): TextGlyphBox? {
                                 if (box == null) return null
                                 return TextGlyphBox(
