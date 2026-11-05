@@ -68,7 +68,7 @@ class ChineseOverlayTranslator(private val context: Context) {
 
     suspend fun scanAndTranslate(
         videoUri: Uri,
-        sampleIntervalMs: Long = 1_000L,
+        sampleIntervalMs: Long = 500L,
         maxFrames: Int = 3_600,
         category: ProductCategory = ProductCategory.AUTO,
         onProgress: (Int) -> Unit = {}
