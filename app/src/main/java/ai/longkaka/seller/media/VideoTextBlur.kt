@@ -131,9 +131,11 @@ internal object VideoTextBlur {
             // themselves (dark or bright text), instead of masking the whole OCR box.
             Imgproc.GaussianBlur(gray, localBackground, Size(0.0, 0.0), 6.0)
             Core.absdiff(gray, localBackground, contrast)
-            val threshold = (strength.coerceIn(3f, 28f) * 0.9f + 5f).toDouble()
-            Imgproc.threshold(contrast, mask, threshold, 255.0, Imgproc.THRESH_BINARY)
-            Imgproc.dilate(mask, expandedMask, kernel)
+            // A stable low threshold catches thin anti-aliased strokes at every setting.
+            // Higher strength expands the glyph mask and lets inpainting sample a wider rim.
+            Imgproc.threshold(contrast, mask, 12.0, 255.0, Imgproc.THRESH_BINARY)
+            val dilationPasses = if (strength >= 20f) 2 else 1
+            Imgproc.dilate(mask, expandedMask, kernel, org.opencv.core.Point(-1.0, -1.0), dilationPasses)
 
             // Telea reconstructs from nearby pixels. Only the character strokes and
             // their thin anti-aliased fringe are replaced; all other pixels are retained.
