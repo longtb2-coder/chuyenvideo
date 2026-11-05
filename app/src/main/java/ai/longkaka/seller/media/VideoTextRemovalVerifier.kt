@@ -64,7 +64,8 @@ internal object VideoTextRemovalVerifier {
                                 originalTracks.any { track ->
                                     val visible = timeMs >= (track.timeMs - 500L).coerceAtLeast(0L) &&
                                         timeMs <= track.lastTimeMs + 500L
-                                    if (!visible) false else {
+                                    val sameOverlayText = resemblesOriginal(track.sourceText, text)
+                                    if (!visible || !sameOverlayText) false else {
                                         val target = track.boundsAt(timeMs) ?: if (track.observations.isEmpty()) {
                                             ai.longkaka.seller.translation.TextRegionObservation(
                                                 timeMs, track.left, track.top, track.right, track.bottom
@@ -102,6 +103,29 @@ internal object VideoTextRemovalVerifier {
             recognizer.close()
             retriever.release()
         }
+    }
+
+    private fun resemblesOriginal(source: String, detected: String): Boolean {
+        val expected = source.filter { it.isLetterOrDigit() }
+        val actual = detected.filter { it.isLetterOrDigit() }
+        if (expected.isBlank() || actual.isBlank()) return false
+        if (expected.contains(actual) || actual.contains(expected)) return true
+        var previous = IntArray(actual.length + 1) { it }
+        for (i in expected.indices) {
+            val current = IntArray(actual.length + 1)
+            current[0] = i + 1
+            for (j in actual.indices) {
+                val cost = if (expected[i] == actual[j]) 0 else 1
+                current[j + 1] = minOf(
+                    current[j] + 1,
+                    previous[j + 1] + 1,
+                    previous[j] + cost
+                )
+            }
+            previous = current
+        }
+        val similarity = 1.0 - previous[actual.length].toDouble() / maxOf(expected.length, actual.length)
+        return similarity >= 0.30
     }
 
     private fun containsChinese(value: String): Boolean {
