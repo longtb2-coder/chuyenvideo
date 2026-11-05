@@ -8,14 +8,14 @@ import ai.longkaka.seller.translation.OnScreenText
 import ai.longkaka.seller.translation.boundsAt
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
+import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
-import kotlin.math.ceil
 
 /**
- * Builds blurred patches for the complete user-selected subtitle region, not only
- * the glyph pixels. This guarantees the replacement caption has a clean surface.
+ * Restores only the detected glyph strokes inside each OCR observation.
+ * The surrounding video pixels are kept untouched; no rectangular blur panel is drawn.
  */
 internal object VideoTextBlur {
     data class Patch(val timeMs: Long, val box: RenderBox, val bitmap: Bitmap)
@@ -106,18 +106,58 @@ internal object VideoTextBlur {
         return result
     }
 
+    /**
+     * Builds a text-shaped mask from local contrast, slightly expands it to catch
+     * anti-aliased edges, then uses Telea inpainting to reconstruct the background.
+     * strength controls the mask tolerance/inpaint radius rather than blurring a box.
+     */
     private fun gaussianBlur(source: Bitmap, strength: Float): Bitmap {
-        val input = Mat()
+        val rgba = Mat()
+        val rgb = Mat()
+        val gray = Mat()
+        val localBackground = Mat()
+        val contrast = Mat()
+        val mask = Mat()
+        val expandedMask = Mat()
+        val restored = Mat()
         val output = Mat()
+        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, Size(3.0, 3.0))
         try {
-            Utils.bitmapToMat(source, input)
-            val sigma = strength.coerceIn(2f, 28f).toDouble()
-            Imgproc.GaussianBlur(input, output, Size(0.0, 0.0), sigma, sigma)
+            Utils.bitmapToMat(source, rgba)
+            Imgproc.cvtColor(rgba, rgb, Imgproc.COLOR_RGBA2RGB)
+            Imgproc.cvtColor(rgb, gray, Imgproc.COLOR_RGB2GRAY)
+
+            // Compare each pixel with its local background. This follows the strokes
+            // themselves (dark or bright text), instead of masking the whole OCR box.
+            Imgproc.GaussianBlur(gray, localBackground, Size(0.0, 0.0), 6.0)
+            Core.absdiff(gray, localBackground, contrast)
+            val threshold = (strength.coerceIn(3f, 28f) * 0.9f + 5f).toDouble()
+            Imgproc.threshold(contrast, mask, threshold, 255.0, Imgproc.THRESH_BINARY)
+            Imgproc.dilate(mask, expandedMask, kernel)
+
+            // Telea reconstructs from nearby pixels. Only the character strokes and
+            // their thin anti-aliased fringe are replaced; all other pixels are retained.
+            Imgproc.inpaint(
+                rgb,
+                expandedMask,
+                restored,
+                strength.coerceIn(2f, 9f).toDouble(),
+                Imgproc.INPAINT_TELEA
+            )
+            Imgproc.cvtColor(restored, output, Imgproc.COLOR_RGB2RGBA)
             return Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
                 .also { Utils.matToBitmap(output, it) }
         } finally {
-            input.release()
+            rgba.release()
+            rgb.release()
+            gray.release()
+            localBackground.release()
+            contrast.release()
+            mask.release()
+            expandedMask.release()
+            restored.release()
             output.release()
+            kernel.release()
         }
     }
 
