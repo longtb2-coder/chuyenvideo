@@ -46,6 +46,7 @@ import ai.longkaka.seller.speech.VieNeuNanoSetupCard
 import ai.longkaka.seller.speech.vieneu.VieNeuChunkTiming
 import java.io.File
 import ai.longkaka.seller.subtitle.VietnameseSubtitleTrack
+import ai.longkaka.seller.sales.SalesAnalysisSummaryBuilder
 import ai.longkaka.seller.sales.SalesProductBrief
 import ai.longkaka.seller.sales.SalesScriptBuilder
 import ai.longkaka.seller.sales.SalesCopyStyle
@@ -102,6 +103,18 @@ fun SellerDashboard() {
     var narrationTimings by remember { mutableStateOf<List<VieNeuChunkTiming>>(emptyList()) }
     var salesCopyStyle by remember { mutableStateOf(SalesCopyStyle.FRIENDLY) }
     var salesCopyLength by remember { mutableStateOf(SalesCopyLength.STANDARD) }
+
+    val salesAnalysisSummary = remember(translatedOverlays, editedTranslations, spokenTranscript, salesAnalysisFrames.size) {
+        SalesAnalysisSummaryBuilder.build(
+            frameCount = salesAnalysisFrames.size,
+            ocr = translatedOverlays.map { it.sourceText },
+            translated = translatedOverlays.mapIndexed { index, item ->
+                editedTranslations[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText
+            },
+            transcript = spokenTranscript
+        )
+    }
+
 
     val subtitleSaver = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/x-subrip")
@@ -466,6 +479,15 @@ fun SellerDashboard() {
                             Text(salesFrameStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(scanStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(salesSpeechStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedTextField(
+                                value = salesAnalysisSummary,
+                                onValueChange = {},
+                                readOnly = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 7,
+                                maxLines = 14,
+                                label = { Text("BẢN TỔNG HỢP NỘI DUNG VIDEO") }
+                            )
                             if (isScanning) {
                                 LinearProgressIndicator(progress = { scanProgress / 100f }, modifier = Modifier.fillMaxWidth())
                             }
@@ -490,6 +512,7 @@ fun SellerDashboard() {
                                     "Thời lượng mong muốn: ${salesCopyLength.label}",
                                     "Ngôn ngữ lời thoại gốc: ${salesSpeechLanguage.label}",
                                     "Lời thoại gốc đã nhận diện: $spokenTranscript",
+                                    "BẢN TỔNG HỢP QUÉT VIDEO:\n$salesAnalysisSummary",
                                     "Nội dung đã dịch từ video: ${translatedOverlays.mapIndexed { index, item -> editedTranslations[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText }.filter { it.isNotBlank() }.joinToString(" | ")}"
                                 ).joinToString("\n"),
                                 currentDraft = generatedSalesScript,
