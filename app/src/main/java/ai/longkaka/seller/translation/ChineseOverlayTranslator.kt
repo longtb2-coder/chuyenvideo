@@ -119,14 +119,22 @@ class ChineseOverlayTranslator(private val context: Context) {
                             val top = (box.top.toFloat() / bitmap.height).coerceIn(0f, 1f)
                             val right = (box.right.toFloat() / bitmap.width).coerceIn(left, 1f)
                             val bottom = (box.bottom.toFloat() / bitmap.height).coerceIn(top, 1f)
-                            val glyphs = line.elements.mapNotNull { element ->
-                                val elementBox = element.boundingBox ?: return@mapNotNull null
-                                TextGlyphBox(
-                                    left = (elementBox.left.toFloat() / bitmap.width).coerceIn(left, right),
-                                    top = (elementBox.top.toFloat() / bitmap.height).coerceIn(top, bottom),
-                                    right = (elementBox.right.toFloat() / bitmap.width).coerceIn(left, right),
-                                    bottom = (elementBox.bottom.toFloat() / bitmap.height).coerceIn(top, bottom)
+                            fun toGlyphBox(box: android.graphics.Rect?): TextGlyphBox? {
+                                if (box == null) return null
+                                return TextGlyphBox(
+                                    left = (box.left.toFloat() / bitmap.width).coerceIn(left, right),
+                                    top = (box.top.toFloat() / bitmap.height).coerceIn(top, bottom),
+                                    right = (box.right.toFloat() / bitmap.width).coerceIn(left, right),
+                                    bottom = (box.bottom.toFloat() / bitmap.height).coerceIn(top, bottom)
                                 ).takeIf { it.right > it.left && it.bottom > it.top }
+                            }
+                            // Symbol boxes are character-level. Element boxes are only a
+                            // fallback for recognizer results that do not expose symbols.
+                            val symbolGlyphs = line.elements.flatMap { element ->
+                                element.symbols.mapNotNull { symbol -> toGlyphBox(symbol.boundingBox) }
+                            }
+                            val glyphs = symbolGlyphs.ifEmpty {
+                                line.elements.mapNotNull { element -> toGlyphBox(element.boundingBox) }
                             }
                             val normalized = text.replace(Regex("\\s+"), "")
                             val cx = (left + right) / 2f
