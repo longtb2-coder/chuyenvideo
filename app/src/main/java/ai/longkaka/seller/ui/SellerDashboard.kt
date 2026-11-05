@@ -174,8 +174,8 @@ fun SellerDashboard() {
 
     Column(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState()).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth()) {
@@ -185,7 +185,7 @@ fun SellerDashboard() {
             }
             Text("● SẴN SÀNG", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
         }
-        Text("Chọn quy trình làm video", style = MaterialTheme.typography.headlineSmall)
+        Text("Không gian làm video", style = MaterialTheme.typography.headlineSmall)
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -212,7 +212,7 @@ fun SellerDashboard() {
 
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(16.dp)) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("QUY TRÌNH 3 BƯỚC", style = MaterialTheme.typography.labelLarge)
+                Text("LỘ TRÌNH THỰC HIỆN", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     (if (workflowMode == SellerWorkflowMode.SALES_VIDEO)
                         listOf("1. Nhập video", "2. Phân tích & viết", "3. Dựng bán hàng")
