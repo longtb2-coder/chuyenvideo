@@ -13,6 +13,7 @@ import org.opencv.core.Mat
 import org.opencv.core.Point
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
+import org.opencv.photo.Photo
 
 /**
  * Restores only the detected glyph strokes inside each OCR observation.
@@ -144,12 +145,12 @@ internal object VideoTextBlur {
 
             // Telea reconstructs from nearby pixels. Only the character strokes and
             // their thin anti-aliased fringe are replaced; all other pixels are retained.
-            Imgproc.inpaint(
+            Photo.inpaint(
                 rgb,
                 expandedMask,
                 restored,
                 strength.coerceIn(2f, 9f).toDouble(),
-                Imgproc.INPAINT_TELEA
+                Photo.INPAINT_TELEA
             )
             Imgproc.cvtColor(restored, output, Imgproc.COLOR_RGB2RGBA)
             // Keep the inpainted RGB only where the glyph mask exists. This is crucial:
