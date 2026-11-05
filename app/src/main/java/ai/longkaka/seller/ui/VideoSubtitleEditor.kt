@@ -258,7 +258,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            exportStageLabel(exportProgress, isExporting),
+                            exportStageLabel(exportProgress, isExporting, blurEnabled.any { it } || coverEnabled.any { it }),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -337,12 +337,12 @@ private fun clock(ms: Long): String {
 }
 
 
-private fun exportStageLabel(progress: Int, running: Boolean): String = when {
+private fun exportStageLabel(progress: Int, running: Boolean, twoPass: Boolean): String = when {
     !running && progress >= 100 -> "Đã kiểm tra tệp MP4 và lưu vào Movies/LONGKAKA SELLER AI."
     progress < 5 -> "Đang chuẩn bị dữ liệu và vùng xử lý…"
-    progress < 45 -> "Đang xử lý hình ảnh, làm sạch chữ gốc…"
-    progress < 50 -> "Đang kiểm tra video trung gian…"
-    progress < 95 -> "Đang kết xuất phụ đề và hoàn thiện hình ảnh, âm thanh…"
+    twoPass && progress < 45 -> "Đang xử lý hình ảnh, làm sạch chữ gốc…"
+    twoPass && progress < 50 -> "Đang kiểm tra video trung gian…"
+    progress < 95 -> "Đang kết xuất hình ảnh, phụ đề và âm thanh…"
     progress < 100 -> "Đang kiểm tra MP4 và lưu vào điện thoại…"
     else -> "Hoàn tất."
 }
