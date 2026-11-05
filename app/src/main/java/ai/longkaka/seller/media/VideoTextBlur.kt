@@ -10,6 +10,7 @@ import ai.longkaka.seller.translation.boundsAt
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
 import org.opencv.core.Core
+import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Point
 import org.opencv.core.Rect
@@ -135,7 +136,7 @@ internal object VideoTextBlur {
         val gray = Mat()
         val localBackground = Mat()
         val contrast = Mat()
-        val mask = Mat()
+        val mask = Mat.zeros(source.height, source.width, CvType.CV_8UC1)
         val expandedMask = Mat()
         val softMask = Mat()
         val restored = Mat()
