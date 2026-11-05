@@ -16,7 +16,6 @@ import org.opencv.core.Point
 import org.opencv.core.Rect
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
-import org.opencv.photo.Photo
 
 /**
  * Restores only the detected glyph strokes inside each OCR observation.
@@ -139,7 +138,7 @@ internal object VideoTextBlur {
         val mask = Mat.zeros(source.height, source.width, CvType.CV_8UC1)
         val expandedMask = Mat()
         val softMask = Mat()
-        val restored = Mat()
+        val blurred = Mat()
         val output = Mat()
         val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, Size(3.0, 3.0))
         try {
@@ -182,22 +181,22 @@ internal object VideoTextBlur {
             }
             // Tight masks need only a one-pixel expansion; broad dilation recreates the
             // very background smearing this pipeline is designed to avoid.
-            val dilationPasses = if (strength >= 20f) 2 else 1
+            val dilationPasses = if (strength >= 20f) 3 else 2
             Imgproc.dilate(mask, expandedMask, kernel, Point(-1.0, -1.0), dilationPasses)
             // Feather only the edge of the glyph mask. Transparent pixels outside it
             // let the live video frame show through instead of freezing a whole crop.
             Imgproc.GaussianBlur(expandedMask, softMask, Size(3.0, 3.0), 0.8)
 
-            // Telea reconstructs from nearby pixels. Only the character strokes and
-            // their thin anti-aliased fringe are replaced; all other pixels are retained.
-            Photo.inpaint(
+            // High-quality glyph-shaped blur is deliberately used instead of Telea
+            // inpainting here. Telea leaves obvious smears on fur, fabric and moving hands;
+            // a soft, tight blur removes the source strokes without inventing fake texture.
+            Imgproc.GaussianBlur(
                 rgb,
-                expandedMask,
-                restored,
-                strength.coerceIn(2f, 9f).toDouble(),
-                Photo.INPAINT_TELEA
+                blurred,
+                Size(0.0, 0.0),
+                strength.coerceIn(6f, 18f).toDouble()
             )
-            Imgproc.cvtColor(restored, output, Imgproc.COLOR_RGB2RGBA)
+            Imgproc.cvtColor(blurred, output, Imgproc.COLOR_RGB2RGBA)
             // Keep the inpainted RGB only where the glyph mask exists. This is crucial:
             // the untouched scene must come from the current video frame at render time.
             Core.insertChannel(softMask, output, 3)
@@ -212,7 +211,7 @@ internal object VideoTextBlur {
             mask.release()
             expandedMask.release()
             softMask.release()
-            restored.release()
+            blurred.release()
             output.release()
             kernel.release()
         }
