@@ -10,6 +10,7 @@ import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.Mat
+import org.opencv.core.Point
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
@@ -88,7 +89,7 @@ internal object VideoTextBlur {
                                         width.toFloat() / frame.width,
                                         height.toFloat() / frame.height
                                     )
-                                    patches += Patch(time, actualBox, gaussianBlur(crop, strength))
+                                    patches += Patch(time, actualBox, restoreGlyphs(crop, strength))
                                 } finally {
                                     crop.recycle()
                                 }
@@ -111,7 +112,7 @@ internal object VideoTextBlur {
      * anti-aliased edges, then uses Telea inpainting to reconstruct the background.
      * strength controls the mask tolerance/inpaint radius rather than blurring a box.
      */
-    private fun gaussianBlur(source: Bitmap, strength: Float): Bitmap {
+    private fun restoreGlyphs(source: Bitmap, strength: Float): Bitmap {
         val rgba = Mat()
         val rgb = Mat()
         val gray = Mat()
@@ -119,6 +120,7 @@ internal object VideoTextBlur {
         val contrast = Mat()
         val mask = Mat()
         val expandedMask = Mat()
+        val softMask = Mat()
         val restored = Mat()
         val output = Mat()
         val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, Size(3.0, 3.0))
@@ -135,7 +137,10 @@ internal object VideoTextBlur {
             // Higher strength expands the glyph mask and lets inpainting sample a wider rim.
             Imgproc.threshold(contrast, mask, 12.0, 255.0, Imgproc.THRESH_BINARY)
             val dilationPasses = if (strength >= 20f) 2 else 1
-            Imgproc.dilate(mask, expandedMask, kernel, org.opencv.core.Point(-1.0, -1.0), dilationPasses)
+            Imgproc.dilate(mask, expandedMask, kernel, Point(-1.0, -1.0), dilationPasses)
+            // Feather only the edge of the glyph mask. Transparent pixels outside it
+            // let the live video frame show through instead of freezing a whole crop.
+            Imgproc.GaussianBlur(expandedMask, softMask, Size(3.0, 3.0), 0.8)
 
             // Telea reconstructs from nearby pixels. Only the character strokes and
             // their thin anti-aliased fringe are replaced; all other pixels are retained.
@@ -147,6 +152,9 @@ internal object VideoTextBlur {
                 Imgproc.INPAINT_TELEA
             )
             Imgproc.cvtColor(restored, output, Imgproc.COLOR_RGB2RGBA)
+            // Keep the inpainted RGB only where the glyph mask exists. This is crucial:
+            // the untouched scene must come from the current video frame at render time.
+            Core.insertChannel(softMask, output, 3)
             return Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
                 .also { Utils.matToBitmap(output, it) }
         } finally {
@@ -157,6 +165,7 @@ internal object VideoTextBlur {
             contrast.release()
             mask.release()
             expandedMask.release()
+            softMask.release()
             restored.release()
             output.release()
             kernel.release()
