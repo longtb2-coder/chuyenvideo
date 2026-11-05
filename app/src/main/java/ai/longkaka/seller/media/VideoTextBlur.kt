@@ -16,6 +16,7 @@ import org.opencv.core.Point
 import org.opencv.core.Rect
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
+import org.opencv.photo.Photo
 
 /**
  * Restores only the detected glyph strokes inside each OCR observation.
@@ -32,7 +33,7 @@ internal object VideoTextBlur {
         strength: Float
     ): Map<Int, List<Patch>> {
         check(runCatching { OpenCVLoader.initLocal() }.getOrDefault(false)) {
-            "Không khởi tạo được OpenCV để làm mờ chữ."
+            "Không khởi tạo được OpenCV để phục hồi nền chữ."
         }
         val active = overlays.indices.filter { index ->
             boxes.getOrNull(index) != null &&
@@ -60,8 +61,8 @@ internal object VideoTextBlur {
                 val patches = mutableListOf<Patch>()
                 selectedObservations.forEach { observed ->
                     val time = observed.timeMs
-                    // Match the editor/export motion transform exactly so the blurred
-                    // patch and its replacement subtitle share the same moving region.
+                    // Match the editor/export motion transform so the restored glyph patch
+                    // and replacement subtitle follow the same selected region.
                     val baseLeft = (item.left - .025f).coerceAtLeast(0f)
                     val baseTop = (item.top - .025f).coerceAtLeast(0f)
                     val baseWidth = (item.right - item.left + .05f).coerceAtLeast(.01f)
@@ -127,7 +128,7 @@ internal object VideoTextBlur {
     /**
      * Builds a text-shaped mask from local contrast, slightly expands it to catch
      * anti-aliased edges, then uses Telea inpainting to reconstruct the background.
-     * strength controls the mask tolerance/inpaint radius rather than blurring a box.
+     * strength controls the inpaint radius; it never selects Gaussian blur.
      */
     private fun restoreGlyphs(source: Bitmap, strength: Float, glyphs: List<TextGlyphBox>): Bitmap {
         val rgba = Mat()
@@ -138,7 +139,7 @@ internal object VideoTextBlur {
         val mask = Mat.zeros(source.height, source.width, CvType.CV_8UC1)
         val expandedMask = Mat()
         val softMask = Mat()
-        val blurred = Mat()
+        val restoredRgb = Mat()
         val output = Mat()
         val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, Size(3.0, 3.0))
         try {
@@ -187,18 +188,20 @@ internal object VideoTextBlur {
             // let the live video frame show through instead of freezing a whole crop.
             Imgproc.GaussianBlur(expandedMask, softMask, Size(3.0, 3.0), 0.8)
 
-            // High-quality glyph-shaped blur is deliberately used instead of Telea
-            // inpainting here. Telea leaves obvious smears on fur, fabric and moving hands;
-            // a soft, tight blur removes the source strokes without inventing fake texture.
-            Imgproc.GaussianBlur(
-                rgb,
-                blurred,
-                Size(0.0, 0.0),
-                strength.coerceIn(6f, 18f).toDouble()
-            )
-            Imgproc.cvtColor(blurred, output, Imgproc.COLOR_RGB2RGBA)
-            // Keep the inpainted RGB only where the glyph mask exists. This is crucial:
-            // the untouched scene must come from the current video frame at render time.
+            // Actually reconstruct pixels from the neighborhood. The previous build
+            // blurred the glyphs and therefore left visible soft smears in the video.
+            // Keep the mask glyph-shaped and tightly expanded so product details outside
+            // the strokes are not modified.
+            val radius = strength.coerceIn(2f, 5f).toDouble()
+            try {
+                Photo.inpaint(rgb, expandedMask, restoredRgb, radius, Photo.INPAINT_TELEA)
+            } catch (_: Throwable) {
+                // NS is a different reconstruction method, not a blur fallback.
+                Photo.inpaint(rgb, expandedMask, restoredRgb, radius, Photo.INPAINT_NS)
+            }
+            Imgproc.cvtColor(restoredRgb, output, Imgproc.COLOR_RGB2RGBA)
+            // Composite only restored glyph pixels. The current frame remains visible
+            // everywhere outside the feathered mask.
             Core.insertChannel(softMask, output, 3)
             return Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
                 .also { Utils.matToBitmap(output, it) }
@@ -211,7 +214,7 @@ internal object VideoTextBlur {
             mask.release()
             expandedMask.release()
             softMask.release()
-            blurred.release()
+            restoredRgb.release()
             output.release()
             kernel.release()
         }
