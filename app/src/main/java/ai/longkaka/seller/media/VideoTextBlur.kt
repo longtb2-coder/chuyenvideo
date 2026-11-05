@@ -182,7 +182,11 @@ internal object VideoTextBlur {
             }
             // Tight masks need only a one-pixel expansion; broad dilation recreates the
             // very background smearing this pipeline is designed to avoid.
-            val dilationPasses = if (strength >= 20f) 3 else 2
+            val dilationPasses = when {
+                strength >= 23f -> 3
+                strength >= 11f -> 2
+                else -> 1
+            }
             Imgproc.dilate(mask, expandedMask, kernel, Point(-1.0, -1.0), dilationPasses)
             // Feather only the edge of the glyph mask. Transparent pixels outside it
             // let the live video frame show through instead of freezing a whole crop.
@@ -192,7 +196,7 @@ internal object VideoTextBlur {
             // blurred the glyphs and therefore left visible soft smears in the video.
             // Keep the mask glyph-shaped and tightly expanded so product details outside
             // the strokes are not modified.
-            val radius = strength.coerceIn(2f, 5f).toDouble()
+            val radius = (2f + ((strength.coerceIn(3f, 28f) - 3f) / 25f) * 3f).toDouble()
             try {
                 Photo.inpaint(rgb, expandedMask, restoredRgb, radius, Photo.INPAINT_TELEA)
             } catch (_: Throwable) {
