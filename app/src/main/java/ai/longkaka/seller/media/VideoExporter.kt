@@ -24,10 +24,16 @@ import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
+import androidx.media3.transformer.ProgressHolder
 import ai.longkaka.seller.translation.OnScreenText
 import ai.longkaka.seller.translation.boundsAt
 import ai.longkaka.seller.speech.vieneu.VieNeuChunkTiming
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -386,9 +392,11 @@ class VideoExporter(private val context: Context) {
         val composition = Composition.Builder(compositionSequences).build()
         try {
             suspendCancellableCoroutine<Unit> { continuation ->
+                var progressJob: Job? = null
                 val transformer = Transformer.Builder(context)
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: androidx.media3.transformer.Composition, result: ExportResult) {
+                            progressJob?.cancel()
                             if (continuation.isActive) continuation.resume(Unit)
                         }
                         override fun onError(
@@ -396,13 +404,25 @@ class VideoExporter(private val context: Context) {
                             result: ExportResult,
                             exception: ExportException
                         ) {
+                            progressJob?.cancel()
                             if (continuation.isActive) continuation.resumeWithException(exception)
                         }
                     }).build()
-                continuation.invokeOnCancellation { runCatching { transformer.cancel() } }
+                continuation.invokeOnCancellation {
+                    progressJob?.cancel()
+                    runCatching { transformer.cancel() }
+                }
                 transformer.start(composition, temp.absolutePath)
-                // Transformer reports completion asynchronously; progress is polled separately
-                // by the app's foreground export controller in the next layer.
+                val progressHolder = ProgressHolder()
+                progressJob = CoroutineScope(Dispatchers.Main.immediate).launch {
+                    while (isActive && continuation.isActive) {
+                        val state = transformer.getProgress(progressHolder)
+                        if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
+                            onProgress(progressHolder.progress.coerceIn(0, 94))
+                        }
+                        delay(400)
+                    }
+                }
             }
             check(temp.exists() && temp.length() > 1024L) { "Bộ dựng không tạo được tệp MP4 hợp lệ." }
             val outputProbe = MediaMetadataRetriever()
