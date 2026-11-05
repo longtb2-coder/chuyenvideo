@@ -60,6 +60,81 @@ class VideoExporter(private val context: Context) {
         salesSubtitleRegionIndex: Int = 0,
         originalAudioVolume: Float = 1f
     ): Uri = withContext(Dispatchers.Main.immediate) {
+        val needsSeparateRestoration = blurEnabled.any { it } || coverEnabled.any { it }
+        if (!needsSeparateRestoration) {
+            return@withContext exportSinglePass(
+                source, overlays, translations, covers, coverEnabled, coverColor, coverAlpha,
+                textSizeSp, editedTexts, narrationFile, onProgress, blurEnabled, blurStrength,
+                salesSubtitleTimings, salesSubtitleRegionIndex, originalAudioVolume
+            )
+        }
+
+        // Pass 1: remove/restore the original text only. No translated caption is drawn here.
+        val cleanedIntermediate = exportSinglePass(
+            source, overlays, translations, covers, coverEnabled, coverColor, coverAlpha,
+            textSizeSp, editedTexts, narrationFile,
+            onProgress = { onProgress((it * 45) / 100) },
+            blurEnabled = blurEnabled,
+            blurStrength = blurStrength,
+            salesSubtitleTimings = salesSubtitleTimings,
+            salesSubtitleRegionIndex = salesSubtitleRegionIndex,
+            originalAudioVolume = originalAudioVolume,
+            drawSubtitles = false,
+            outputPrefix = "LONGKAKA_CLEAN_STAGE"
+        )
+        try {
+            verifyCleanIntermediate(source, cleanedIntermediate)
+
+            // Pass 2: use the cleaned video as the new source and burn captions only.
+            // Audio (including VieNeu narration) is already present in the intermediate,
+            // so it is copied at unity gain and never mixed a second time.
+            exportSinglePass(
+                source = cleanedIntermediate,
+                overlays = overlays,
+                translations = if (needsSeparateRestoration) covers else translations,
+                covers = covers,
+                coverEnabled = overlays.indices.map { false },
+                coverColor = coverColor,
+                coverAlpha = coverAlpha,
+                textSizeSp = textSizeSp,
+                editedTexts = editedTexts,
+                narrationFile = null,
+                onProgress = { onProgress(50 + (it / 2)) },
+                blurEnabled = emptyList(),
+                blurStrength = blurStrength,
+                salesSubtitleTimings = salesSubtitleTimings,
+                salesSubtitleRegionIndex = salesSubtitleRegionIndex,
+                originalAudioVolume = 1f,
+                allowSubtitleWithoutNarration = salesSubtitleTimings.isNotEmpty(),
+                outputPrefix = "LONGKAKA"
+            )
+        } finally {
+            // Never delete the original input. Only remove this app-created intermediate.
+            runCatching { context.contentResolver.delete(cleanedIntermediate, null, null) }
+        }
+    }
+
+    private suspend fun exportSinglePass(
+        source: Uri,
+        overlays: List<OnScreenText>,
+        translations: List<RenderBox>,
+        covers: List<RenderBox>,
+        coverEnabled: List<Boolean>,
+        coverColor: Int,
+        coverAlpha: Float,
+        textSizeSp: Float,
+        editedTexts: Map<Int, String>,
+        narrationFile: File? = null,
+        onProgress: (Int) -> Unit = {},
+        blurEnabled: List<Boolean> = emptyList(),
+        blurStrength: Float = 12f,
+        salesSubtitleTimings: List<VieNeuChunkTiming> = emptyList(),
+        salesSubtitleRegionIndex: Int = 0,
+        originalAudioVolume: Float = 1f,
+        drawSubtitles: Boolean = true,
+        allowSubtitleWithoutNarration: Boolean = false,
+        outputPrefix: String = "LONGKAKA"
+    ): Uri = withContext(Dispatchers.Main.immediate) {
         require(source != Uri.EMPTY) { "Video đầu vào không hợp lệ." }
         require(originalAudioVolume in 0f..1f) { "Âm lượng âm thanh gốc phải từ 0 đến 100%." }
         require(translations.size == overlays.size && covers.size == overlays.size && coverEnabled.size == overlays.size) {
@@ -75,7 +150,7 @@ class VideoExporter(private val context: Context) {
         require(sourceDurationMs > 0L) { "Không đọc được thời lượng video nguồn. Hãy chọn lại video." }
         val hasNarration = narrationFile != null && narrationFile.exists() && narrationFile.length() > 44L
         require(narrationFile == null || hasNarration) { "Tệp giọng đọc không tồn tại hoặc bị lỗi. Hãy tạo lại giọng đọc trước khi xuất." }
-        require(salesSubtitleTimings.isEmpty() || hasNarration) { "Có phụ đề đồng bộ giọng đọc nhưng chưa có tệp giọng đọc hợp lệ." }
+        require(salesSubtitleTimings.isEmpty() || hasNarration || allowSubtitleWithoutNarration) { "Có phụ đề đồng bộ giọng đọc nhưng chưa có tệp giọng đọc hợp lệ." }
         val temp = File(context.cacheDir, "seller_export_" + System.currentTimeMillis() + ".mp4")
         val blurSamples = if (blurEnabled.any { it }) withContext(Dispatchers.IO) { VideoTextBlur.prepare(context, source, overlays, covers, blurStrength) } else emptyMap()
         val overlay = object : CanvasOverlay(true) {
@@ -201,7 +276,9 @@ class VideoExporter(private val context: Context) {
                     val top = b.top * canvas.height
                     val right = (b.left + b.width) * canvas.width
                     val bottom = (b.top + b.height) * canvas.height
-                    val text = if (salesSubtitleTimings.isNotEmpty()) {
+                    val text = if (!drawSubtitles) {
+                        ""
+                    } else if (salesSubtitleTimings.isNotEmpty()) {
                         if (index == salesSubtitleRegionIndex) activeSalesCaption?.text.orEmpty() else ""
                     } else editedTexts[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText
                     if (text.isBlank()) return@forEachIndexed
@@ -343,7 +420,7 @@ class VideoExporter(private val context: Context) {
             }
             onProgress(95)
             val values = ContentValues().apply {
-                put(MediaStore.Video.Media.DISPLAY_NAME, "LONGKAKA_${System.currentTimeMillis()}.mp4")
+                put(MediaStore.Video.Media.DISPLAY_NAME, "${outputPrefix}_${System.currentTimeMillis()}.mp4")
                 put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
                 if (Build.VERSION.SDK_INT >= 29) put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/LONGKAKA SELLER AI")
                 if (Build.VERSION.SDK_INT >= 29) put(MediaStore.Video.Media.IS_PENDING, 1)
@@ -379,6 +456,49 @@ class VideoExporter(private val context: Context) {
             VideoTextBlur.release(blurSamples)
         }
     }
+    private fun verifyCleanIntermediate(original: Uri, cleaned: Uri) {
+        fun metadata(uri: Uri): Triple<Long, Int, Int> {
+            val retriever = MediaMetadataRetriever()
+            return try {
+                retriever.setDataSource(context, uri)
+                Triple(
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0,
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                )
+            } finally {
+                retriever.release()
+            }
+        }
+        val before = metadata(original)
+        val after = metadata(cleaned)
+        check(after.first > 0L && after.second > 0 && after.third > 0) {
+            "Video sau khi xóa chữ không có khung hình hợp lệ. Chưa thể chèn phụ đề."
+        }
+        check(kotlin.math.abs(before.first - after.first) <= 1500L) {
+            "Video trung gian bị thay đổi thời lượng bất thường. Đã dừng trước bước chèn phụ đề."
+        }
+        check(containsTrack(context, cleaned, "video/")) {
+            "Không tìm thấy luồng hình ảnh trong video sau khi xóa chữ."
+        }
+        // Decode three checkpoints to catch a corrupt or unreadable intermediate before
+        // any subtitle is burned into it. This is a technical verification, not OCR proof.
+        val probe = MediaMetadataRetriever()
+        try {
+            probe.setDataSource(context, cleaned)
+            val durationUs = after.first * 1000L
+            listOf(0.10, 0.50, 0.90).forEach { fraction ->
+                val frame = probe.getFrameAtTime((durationUs * fraction).toLong(), MediaMetadataRetriever.OPTION_CLOSEST)
+                check(frame != null) {
+                    "Không đọc được khung hình kiểm tra sau khi xóa chữ. Đã dừng trước bước chèn phụ đề."
+                }
+                frame?.recycle()
+            }
+        } finally {
+            probe.release()
+        }
+    }
+
 }
  
 private fun containsTrack(file: File, mimePrefix: String): Boolean {
