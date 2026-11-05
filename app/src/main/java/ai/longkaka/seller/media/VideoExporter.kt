@@ -557,3 +557,63 @@ private fun containsTrack(context: Context, uri: Uri, mimePrefix: String): Boole
         extractor.release()
     }
 }
+
+
+/** Converts processing exceptions into a safe, actionable recovery plan. */
+data class VideoRecoveryAdvice(
+    val title: String,
+    val explanation: String,
+    val nextStep: String
+)
+
+object VideoRecoveryAdvisor {
+    fun diagnose(error: Throwable): VideoRecoveryAdvice {
+        val chain = generateSequence(error) { it.cause }
+            .take(8)
+            .joinToString(" ") { (it.message ?: it.javaClass.simpleName).lowercase() }
+        return when {
+            "residual" in chain || "còn sót" in chain || "chữ trung" in chain ->
+                VideoRecoveryAdvice(
+                    "Phục hồi chữ chưa đạt",
+                    "Bộ kiểm định vẫn phát hiện chữ gốc trong vùng cần xóa. App dừng trước khi chèn phụ đề để không che giấu lỗi.",
+                    "Khoanh sát lại vùng chữ. Nếu chữ nằm trên nền chuyển động/phức tạp, cần phục hồi theo khung hình lân cận hoặc chỉnh vùng thủ công."
+                )
+            "opencv" in chain || "inpaint" in chain || "native" in chain ->
+                VideoRecoveryAdvice(
+                    "Bộ phục hồi hình ảnh gặp lỗi",
+                    "Không hoàn tất được bước tạo mặt nạ hoặc phục hồi nền. App không tự chuyển sang làm nhòe vì sẽ giảm chất lượng.",
+                    "Kiểm tra video nguồn và thử lại. Nếu lặp lại, cần kiểm tra thư viện OpenCV hoặc vùng chữ OCR."
+                )
+            "outofmemory" in chain || "out of memory" in chain ->
+                VideoRecoveryAdvice(
+                    "Thiếu bộ nhớ xử lý",
+                    "Khung hình hoặc số vùng xử lý vượt quá bộ nhớ còn trống của điện thoại.",
+                    "Đóng ứng dụng nền, giải phóng bộ nhớ rồi thử video ngắn hơn hoặc video có độ phân giải thấp hơn."
+                )
+            "encoder" in chain || "codec" in chain || "transformer" in chain || "muxer" in chain ->
+                VideoRecoveryAdvice(
+                    "Bộ mã hóa MP4 gặp lỗi",
+                    "Thiết bị không hoàn tất được cấu hình mã hóa hoặc ghép luồng hình/tiếng.",
+                    "Thử lại sau khi khởi động lại ứng dụng. Nếu vẫn lỗi, cần điều chỉnh codec hoặc cấu hình xuất."
+                )
+            "narration" in chain || "giọng đọc" in chain || "audio" in chain ->
+                VideoRecoveryAdvice(
+                    "Lỗi tệp âm thanh",
+                    "Không đọc được hoặc không ghép được giọng đọc/âm thanh nguồn.",
+                    "Tạo lại tệp giọng đọc, nghe thử và kiểm tra thời lượng trước khi xuất."
+                )
+            "duration" in chain || "thời lượng" in chain || "ngắn hơn" in chain || "mp4" in chain ->
+                VideoRecoveryAdvice(
+                    "Video đầu ra chưa hợp lệ",
+                    "MP4 không vượt qua kiểm tra thời lượng, khung hình hoặc luồng âm thanh/hình ảnh.",
+                    "Giữ video gốc, kiểm tra dung lượng trống và thử xuất lại. Không sử dụng tệp MP4 lỗi."
+                )
+            else -> VideoRecoveryAdvice(
+                "Chưa xác định được nguyên nhân",
+                error.message?.take(240)?.ifBlank { "Quá trình xử lý gặp lỗi không xác định." }
+                    ?: "Quá trình xử lý gặp lỗi không xác định.",
+                "Ghi lại thông tin lỗi và video nguồn để xác định đúng công đoạn cần sửa; không bỏ qua lỗi để xuất tệp."
+            )
+        }
+    }
+}
