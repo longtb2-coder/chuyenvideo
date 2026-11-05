@@ -24,12 +24,15 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.hypot
 
+data class TextGlyphBox(val left: Float, val top: Float, val right: Float, val bottom: Float)
+
 data class TextRegionObservation(
     val timeMs: Long,
     val left: Float,
     val top: Float,
     val right: Float,
-    val bottom: Float
+    val bottom: Float,
+    val glyphs: List<TextGlyphBox> = emptyList()
 )
 
 data class OnScreenText(
@@ -116,6 +119,15 @@ class ChineseOverlayTranslator(private val context: Context) {
                             val top = (box.top.toFloat() / bitmap.height).coerceIn(0f, 1f)
                             val right = (box.right.toFloat() / bitmap.width).coerceIn(left, 1f)
                             val bottom = (box.bottom.toFloat() / bitmap.height).coerceIn(top, 1f)
+                            val glyphs = line.elements.mapNotNull { element ->
+                                val elementBox = element.boundingBox ?: return@mapNotNull null
+                                TextGlyphBox(
+                                    left = (elementBox.left.toFloat() / bitmap.width).coerceIn(left, right),
+                                    top = (elementBox.top.toFloat() / bitmap.height).coerceIn(top, bottom),
+                                    right = (elementBox.right.toFloat() / bitmap.width).coerceIn(left, right),
+                                    bottom = (elementBox.bottom.toFloat() / bitmap.height).coerceIn(top, bottom)
+                                ).takeIf { it.right > it.left && it.bottom > it.top }
+                            }
                             val normalized = text.replace(Regex("\\s+"), "")
                             val cx = (left + right) / 2f
                             val cy = (top + bottom) / 2f
@@ -140,7 +152,7 @@ class ChineseOverlayTranslator(private val context: Context) {
                                     top = top,
                                     right = right,
                                     bottom = bottom,
-                                    observations = mutableListOf(TextRegionObservation(timeMs, left, top, right, bottom))
+                                    observations = mutableListOf(TextRegionObservation(timeMs, left, top, right, bottom, glyphs))
                                 )
                             } else {
                                 candidate.lastTimeMs = timeMs
@@ -148,7 +160,7 @@ class ChineseOverlayTranslator(private val context: Context) {
                                 candidate.top = minOf(candidate.top, top)
                                 candidate.right = maxOf(candidate.right, right)
                                 candidate.bottom = maxOf(candidate.bottom, bottom)
-                                candidate.observations += TextRegionObservation(timeMs, left, top, right, bottom)
+                                candidate.observations += TextRegionObservation(timeMs, left, top, right, bottom, glyphs)
                                 if (text.length > candidate.displayText.length) candidate.displayText = text
                             }
                         }
