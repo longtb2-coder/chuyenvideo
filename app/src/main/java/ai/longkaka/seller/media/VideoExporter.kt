@@ -120,11 +120,14 @@ class VideoExporter(private val context: Context) {
                         if (patch != null) {
                             // Blur the entire selected replacement area, then render the
                             // Vietnamese subtitle into that exact moving rectangle below.
+                            // The patch bitmap contains only the glyph-shaped alpha mask
+                            // for its own sampled OCR position. Draw it at that exact geometry;
+                            // stretching it over the full subtitle panel would misalign the mask.
                             val destination = RectF(
-                                motionBox.left * canvas.width,
-                                motionBox.top * canvas.height,
-                                (motionBox.left + motionBox.width) * canvas.width,
-                                (motionBox.top + motionBox.height) * canvas.height
+                                patch.box.left * canvas.width,
+                                patch.box.top * canvas.height,
+                                (patch.box.left + patch.box.width) * canvas.width,
+                                (patch.box.top + patch.box.height) * canvas.height
                             )
                             canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
                         }
