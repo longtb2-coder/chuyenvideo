@@ -115,14 +115,17 @@ class VideoExporter(private val context: Context) {
                     val blurThisOverlay = blurEnabled.getOrElse(index) { false }
                     // Layer 1: blur the original pixels. Keep drawing below so the Vietnamese
                     // subtitle is composited on top of this blurred region in the same frame.
-                    if (blurThisOverlay && trackVisible) {
+                    if (blurThisOverlay && (trackVisible || captionNeedsStaticRegion)) {
                         val patch = blurSamples[index]?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
                         if (patch != null) {
-                            // Draw only the blurred OCR text patch at its sampled source position.
-                            // The selected region is a clip/boundary, never a full-frame blur target.
-                            val p = patch.box
-                            val destination = RectF(p.left * canvas.width, p.top * canvas.height,
-                                (p.left + p.width) * canvas.width, (p.top + p.height) * canvas.height)
+                            // Blur the entire selected replacement area, then render the
+                            // Vietnamese subtitle into that exact moving rectangle below.
+                            val destination = RectF(
+                                motionBox.left * canvas.width,
+                                motionBox.top * canvas.height,
+                                (motionBox.left + motionBox.width) * canvas.width,
+                                (motionBox.top + motionBox.height) * canvas.height
+                            )
                             canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
                         }
                     }
