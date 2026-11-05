@@ -90,11 +90,59 @@ class VideoExporter(private val context: Context) {
 
             override fun onDraw(canvas: Canvas, presentationTimeUs: Long) {
                 val t = presentationTimeUs / 1000L
-                val activeSalesCaption = salesSubtitleTimings.firstOrNull { t >= it.startMs && t <= it.endMs }
+                val activeSalesCaption = salesSubtitleTimings
+                    .filter { t >= it.startMs && t < it.endMs }
+                    .maxByOrNull { it.startMs }
+
+                // OCR can produce several subtitle tracks for changing words in the same
+                // screen position. Never burn all overlapping tracks at once: select only
+                // the track whose observation is closest to this output frame.
+                fun regionAt(index: Int): RenderBox {
+                    val item = overlays[index]
+                    val observed = item.boundsAt(t)
+                    return if (observed != null) {
+                        RenderBox(observed.left, observed.top,
+                            (observed.right - observed.left).coerceAtLeast(0f),
+                            (observed.bottom - observed.top).coerceAtLeast(0f))
+                    } else RenderBox(item.left, item.top,
+                        (item.right - item.left).coerceAtLeast(0f),
+                        (item.bottom - item.top).coerceAtLeast(0f))
+                }
+                fun overlapRatio(a: RenderBox, b: RenderBox): Float {
+                    val width = (minOf(a.left + a.width, b.left + b.width) - maxOf(a.left, b.left)).coerceAtLeast(0f)
+                    val height = (minOf(a.top + a.height, b.top + b.height) - maxOf(a.top, b.top)).coerceAtLeast(0f)
+                    val intersection = width * height
+                    val smaller = minOf(a.width * a.height, b.width * b.height)
+                    return if (smaller <= 0f) 0f else intersection / smaller
+                }
+                val activeOverlayIndices = overlays.indices.filter { index ->
+                    val item = overlays[index]
+                    val visible = t >= (item.timeMs - 500L).coerceAtLeast(0L) && t <= item.lastTimeMs + 500L
+                    visible && (item.observations.isEmpty() || item.boundsAt(t) != null)
+                }
+                fun observationDistance(index: Int): Long {
+                    val item = overlays[index]
+                    return item.observations.minOfOrNull { kotlin.math.abs(it.timeMs - t) }
+                        ?: kotlin.math.abs(item.timeMs - t)
+                }
                 overlays.forEachIndexed { index, item ->
                     val trackVisible = t >= (item.timeMs - 500L).coerceAtLeast(0L) && t <= item.lastTimeMs + 500L
                     val captionNeedsStaticRegion = salesSubtitleTimings.isNotEmpty() && index == salesSubtitleRegionIndex && activeSalesCaption != null
                     if (!trackVisible && !captionNeedsStaticRegion) return@forEachIndexed
+                    if (trackVisible) {
+                        val currentBox = regionAt(index)
+                        val currentDistance = observationDistance(index)
+                        val superseded = activeOverlayIndices.any { otherIndex ->
+                            if (otherIndex == index) false else {
+                                val other = overlays[otherIndex]
+                                val otherDistance = observationDistance(otherIndex)
+                                overlapRatio(currentBox, regionAt(otherIndex)) >= 0.35f &&
+                                    (otherDistance < currentDistance ||
+                                        (otherDistance == currentDistance && other.timeMs > item.timeMs))
+                            }
+                        }
+                        if (superseded) return@forEachIndexed
+                    }
                     val c = covers[index]
                     val observed = if (trackVisible) item.boundsAt(t) else null
                     val defaultLeft = (item.left - 0.025f).coerceAtLeast(0f)
@@ -123,11 +171,14 @@ class VideoExporter(private val context: Context) {
                             // The patch bitmap contains only the glyph-shaped alpha mask
                             // for its own sampled OCR position. Draw it at that exact geometry;
                             // stretching it over the full subtitle panel would misalign the mask.
+                            // Reposition the sampled glyph-shaped restoration patch to the
+                            // current OCR motion box. Keeping its original sample coordinates
+                            // caused moving text to leave uncovered trails.
                             val destination = RectF(
-                                patch.box.left * canvas.width,
-                                patch.box.top * canvas.height,
-                                (patch.box.left + patch.box.width) * canvas.width,
-                                (patch.box.top + patch.box.height) * canvas.height
+                                motionBox.left * canvas.width,
+                                motionBox.top * canvas.height,
+                                (motionBox.left + motionBox.width) * canvas.width,
+                                (motionBox.top + motionBox.height) * canvas.height
                             )
                             canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
                         }
