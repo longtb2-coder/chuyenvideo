@@ -5,12 +5,14 @@ import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import ai.longkaka.seller.translation.OnScreenText
+import ai.longkaka.seller.translation.TextGlyphBox
 import ai.longkaka.seller.translation.boundsAt
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.Point
+import org.opencv.core.Rect
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import org.opencv.photo.Photo
@@ -90,7 +92,21 @@ internal object VideoTextBlur {
                                         width.toFloat() / frame.width,
                                         height.toFloat() / frame.height
                                     )
-                                    patches += Patch(time, actualBox, restoreGlyphs(crop, strength))
+                                    val mappedGlyphs = observed.glyphs.mapNotNull { glyph ->
+                                        val lineWidth = (observed.right - observed.left).coerceAtLeast(0.0001f)
+                                        val lineHeight = (observed.bottom - observed.top).coerceAtLeast(0.0001f)
+                                        val mappedLeft = region.left + ((glyph.left - observed.left) / lineWidth) * region.width
+                                        val mappedTop = region.top + ((glyph.top - observed.top) / lineHeight) * region.height
+                                        val mappedRight = region.left + ((glyph.right - observed.left) / lineWidth) * region.width
+                                        val mappedBottom = region.top + ((glyph.bottom - observed.top) / lineHeight) * region.height
+                                        TextGlyphBox(
+                                            left = (mappedLeft - actualBox.left) / actualBox.width,
+                                            top = (mappedTop - actualBox.top) / actualBox.height,
+                                            right = (mappedRight - actualBox.left) / actualBox.width,
+                                            bottom = (mappedBottom - actualBox.top) / actualBox.height
+                                        ).takeIf { it.right > it.left && it.bottom > it.top }
+                                    }
+                                    patches += Patch(time, actualBox, restoreGlyphs(crop, strength, mappedGlyphs))
                                 } finally {
                                     crop.recycle()
                                 }
@@ -113,7 +129,7 @@ internal object VideoTextBlur {
      * anti-aliased edges, then uses Telea inpainting to reconstruct the background.
      * strength controls the mask tolerance/inpaint radius rather than blurring a box.
      */
-    private fun restoreGlyphs(source: Bitmap, strength: Float): Bitmap {
+    private fun restoreGlyphs(source: Bitmap, strength: Float, glyphs: List<TextGlyphBox>): Bitmap {
         val rgba = Mat()
         val rgb = Mat()
         val gray = Mat()
@@ -130,16 +146,42 @@ internal object VideoTextBlur {
             Imgproc.cvtColor(rgba, rgb, Imgproc.COLOR_RGBA2RGB)
             Imgproc.cvtColor(rgb, gray, Imgproc.COLOR_RGB2GRAY)
 
-            // Compare each pixel with its local background. This follows the strokes
-            // themselves (dark or bright text), instead of masking the whole OCR box.
-            Imgproc.GaussianBlur(gray, localBackground, Size(0.0, 0.0), 6.0)
+            // Estimate local contrast once, but only threshold pixels inside ML Kit's
+            // tight element boxes. The OCR line rectangle is never treated as a text mask:
+            // product edges, hands, fabric and other moving details outside glyph boxes stay clear.
+            Imgproc.GaussianBlur(gray, localBackground, Size(0.0, 0.0), 4.0)
             Core.absdiff(gray, localBackground, contrast)
-            // A stable low threshold catches thin anti-aliased strokes at every setting.
-            // Higher strength expands the glyph mask and lets inpainting sample a wider rim.
-            // A slightly more sensitive contrast threshold catches anti-aliased edges;
-            // two small dilations close pinholes without turning the whole OCR box into a mask.
-            Imgproc.threshold(contrast, mask, 9.0, 255.0, Imgproc.THRESH_BINARY)
-            val dilationPasses = if (strength >= 20f) 3 else 2
+            if (glyphs.isNotEmpty()) {
+                glyphs.forEach { glyph ->
+                    val padX = 1
+                    val padY = 1
+                    val x1 = (glyph.left * source.width).toInt().coerceIn(0, source.width - 1)
+                    val y1 = (glyph.top * source.height).toInt().coerceIn(0, source.height - 1)
+                    val x2 = (glyph.right * source.width).toInt().coerceIn(x1 + 1, source.width)
+                    val y2 = (glyph.bottom * source.height).toInt().coerceIn(y1 + 1, source.height)
+                    val rect = Rect(
+                        (x1 - padX).coerceAtLeast(0),
+                        (y1 - padY).coerceAtLeast(0),
+                        (x2 - x1 + padX * 2).coerceAtMost(source.width - (x1 - padX).coerceAtLeast(0)),
+                        (y2 - y1 + padY * 2).coerceAtMost(source.height - (y1 - padY).coerceAtLeast(0))
+                    )
+                    if (rect.width < 2 || rect.height < 2) return@forEach
+                    val contrastRoi = contrast.submat(rect)
+                    val maskRoi = mask.submat(rect)
+                    try {
+                        Imgproc.threshold(contrastRoi, maskRoi, 7.0, 255.0, Imgproc.THRESH_BINARY)
+                    } finally {
+                        contrastRoi.release()
+                        maskRoi.release()
+                    }
+                }
+            } else {
+                // Compatibility path for older saved scans without element geometry.
+                Imgproc.threshold(contrast, mask, 11.0, 255.0, Imgproc.THRESH_BINARY)
+            }
+            // Tight masks need only a one-pixel expansion; broad dilation recreates the
+            // very background smearing this pipeline is designed to avoid.
+            val dilationPasses = if (strength >= 20f) 2 else 1
             Imgproc.dilate(mask, expandedMask, kernel, Point(-1.0, -1.0), dilationPasses)
             // Feather only the edge of the glyph mask. Transparent pixels outside it
             // let the live video frame show through instead of freezing a whole crop.
