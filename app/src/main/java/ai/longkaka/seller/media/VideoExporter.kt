@@ -86,7 +86,10 @@ class VideoExporter(private val context: Context) {
             verifyCleanIntermediate(source, cleanedIntermediate)
             // Re-run Chinese OCR on the cleaned video, limited to the original target
             // regions. If any source glyph remains, stop before subtitle burn-in.
-            VideoTextRemovalVerifier.requireNoResidualChinese(context, cleanedIntermediate, overlays)
+            val selectedRemovalTracks = overlays.filterIndexed { index, _ ->
+                blurEnabled.getOrElse(index) { false } || coverEnabled.getOrElse(index) { false }
+            }
+            VideoTextRemovalVerifier.requireNoResidualChinese(context, cleanedIntermediate, selectedRemovalTracks)
 
             // Pass 2: use the cleaned video as the new source and burn captions only.
             // Audio (including VieNeu narration) is already present in the intermediate,
@@ -109,7 +112,9 @@ class VideoExporter(private val context: Context) {
                 salesSubtitleRegionIndex = salesSubtitleRegionIndex,
                 originalAudioVolume = 1f,
                 allowSubtitleWithoutNarration = salesSubtitleTimings.isNotEmpty(),
-                subtitleFollowsMotion = true,
+                subtitleFollowsMotionIndices = overlays.indices.filter { index ->
+                    blurEnabled.getOrElse(index) { false } || coverEnabled.getOrElse(index) { false }
+                }.toSet(),
                 outputPrefix = "LONGKAKA"
             )
         } finally {
@@ -137,7 +142,7 @@ class VideoExporter(private val context: Context) {
         originalAudioVolume: Float = 1f,
         drawSubtitles: Boolean = true,
         allowSubtitleWithoutNarration: Boolean = false,
-        subtitleFollowsMotion: Boolean = false,
+        subtitleFollowsMotionIndices: Set<Int> = emptySet(),
         outputPrefix: String = "LONGKAKA"
     ): Uri = withContext(Dispatchers.Main.immediate) {
         require(source != Uri.EMPTY) { "Video đầu vào không hợp lệ." }
@@ -276,7 +281,7 @@ class VideoExporter(private val context: Context) {
                     }
                     // The cover is the actual subtitle panel: burn the Vietnamese caption
                     // inside that same rectangle so it replaces (not sits beside) Chinese text.
-                    val b = if (subtitleFollowsMotion || blurThisOverlay || coverEnabled.getOrElse(index) { false }) motionBox else translations[index]
+                    val b = if (index in subtitleFollowsMotionIndices || blurThisOverlay || coverEnabled.getOrElse(index) { false }) motionBox else translations[index]
                     val left = b.left * canvas.width
                     val top = b.top * canvas.height
                     val right = (b.left + b.width) * canvas.width
