@@ -44,9 +44,11 @@ internal object VideoTextBlur {
 
         val retriever = MediaMetadataRetriever()
         val result = linkedMapOf<Int, MutableList<Patch>>()
-        // Keep memory bounded on phones: distribute at most 160 source-frame patches
-        // over all OCR tracks, while ensuring every track receives at least two samples.
-        val perRegionBudget = (160 / active.size).coerceAtLeast(2)
+        // Keep memory bounded on phones while improving temporal coverage. The previous
+        // 160-patch global cap left long caption tracks with large time gaps, so a nearby
+        // output frame could reuse a patch from a visibly different background.
+        // 240 total / 64 per track is a conservative compromise for 8 GB devices.
+        val perRegionBudget = minOf(64, (240 / active.size).coerceAtLeast(2))
         try {
             retriever.setDataSource(context, source)
             active.forEach { index ->
