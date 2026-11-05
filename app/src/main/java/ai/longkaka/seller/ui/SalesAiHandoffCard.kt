@@ -55,7 +55,20 @@ NHIỆM VỤ PHÂN TÍCH SẢN PHẨM:
 5. Dùng phong cách và thời lượng người bán yêu cầu. Viết MỘT kịch bản mới, không dịch nguyên văn: mở đầu cuốn hút 2-3 giây; giới thiệu đúng sản phẩm; nối từng thao tác/đặc điểm nhìn thấy với lợi ích thực tế có căn cứ; nói rõ đối tượng phù hợp; kết thúc bằng CTA tự nhiên.
 6. Chỉ dùng giá, ưu đãi, thông số, chất liệu, xuất xứ, chứng nhận, bảo hành, tồn kho và công dụng đặc biệt khi có nguồn xác nhận. Nếu chưa có, bỏ qua hoặc dùng cách diễn đạt trung tính.
 7. Lời thoại tiếng Việt tự nhiên, câu ngắn, không đọc kiểu liệt kê máy móc, không lặp ý, phù hợp tốc độ giọng AI và đúng thời lượng.
-Chỉ trả về lời thoại hoàn chỉnh để đưa vào tạo giọng đọc; không thêm tiêu đề, phân tích hay ghi chú.
+HÃY TRẢ KẾT QUẢ THEO ĐÚNG 2 PHẦN SAU:
+[PHAN_TICH]
+- Sản phẩm/nhóm sản phẩm nhận diện được:
+- Diễn biến video theo thứ tự cảnh:
+- Đặc điểm nhìn thấy và thao tác thực tế:
+- Nhu cầu/đối tượng phù hợp:
+- Lợi ích có bằng chứng:
+- Thông tin chưa xác minh hoặc còn thiếu:
+- Gợi ý góc bán hàng mới:
+[/PHAN_TICH]
+[KICH_BAN]
+Chỉ viết lời thoại hoàn chỉnh, tự nhiên, đúng thời lượng, không chèn ghi chú sân khấu.
+[/KICH_BAN]
+Không bỏ phần phân tích. Không bịa dữ kiện. Nếu thiếu ảnh hoặc transcript, phải nói rõ giới hạn.
         """.trimIndent()
     }
 
@@ -128,13 +141,13 @@ Chỉ trả về lời thoại hoàn chỉnh để đưa vào tạo giọng đ�
                 onValueChange = { answer = it },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 5,
-                label = { Text("Dán lời thoại ChatGPT/Gemini trả về") }
+                label = { Text("Dán kết quả AI (gồm phân tích và kịch bản)") }
             )
             Button(
-                onClick = { onAccept(answer.trim()) },
+                onClick = {\n                    val script = Regex("(?is)\\\\[KICH_BAN\\\\](.*?)\\\\[/KICH_BAN\\\\]").find(answer)?.groupValues?.get(1)?.trim()\n                    onAccept(script?.takeIf { it.isNotBlank() } ?: answer.trim())\n                },
                 enabled = answer.isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("DÙNG LỜI THOẠI NÀY ĐỂ TẠO GIỌNG ĐỌC") }
+            ) { Text("LẤY RIÊNG KỊCH BẢN ĐỂ TẠO GIỌNG ĐỌC") }
         }
     }
 }
