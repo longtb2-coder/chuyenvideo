@@ -144,7 +144,10 @@ Không bỏ phần phân tích. Không bịa dữ kiện. Nếu thiếu ảnh ho
                 label = { Text("Dán kết quả AI (gồm phân tích và kịch bản)") }
             )
             Button(
-                onClick = {\n                    val script = Regex("(?is)\\\\[KICH_BAN\\\\](.*?)\\\\[/KICH_BAN\\\\]").find(answer)?.groupValues?.get(1)?.trim()\n                    onAccept(script?.takeIf { it.isNotBlank() } ?: answer.trim())\n                },
+                onClick = {
+                    val script = answer.substringAfter("[KICH_BAN]", "").substringBefore("[/KICH_BAN]").trim()
+                    onAccept(script.ifBlank { answer.trim() })
+                },
                 enabled = answer.isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
             ) { Text("LẤY RIÊNG KỊCH BẢN ĐỂ TẠO GIỌNG ĐỌC") }
