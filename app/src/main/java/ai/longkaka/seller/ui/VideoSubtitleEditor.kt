@@ -41,6 +41,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     val scope = rememberCoroutineScope()
     var isExporting by remember { mutableStateOf(false) }
     var exportStatus by remember { mutableStateOf("Chưa xuất video.") }
+    var exportProgress by remember { mutableIntStateOf(0) }
     val exporter = remember(context) { VideoExporter(context.applicationContext) }
     val exoPlayer = remember(videoUri) {
         ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(videoUri)); prepare(); playWhenReady = false }
@@ -206,7 +207,8 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
             Button(onClick = {
                 if (!isExporting) {
                     isExporting = true
-                    exportStatus = "Đang kết xuất MP4…"
+                    exportProgress = 0
+                    exportStatus = "Đang chuẩn bị xuất video…"
                     scope.launch {
                         runCatching {
                             exporter.export(videoUri, editableOverlays,
@@ -216,7 +218,8 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                                 blurEnabled = blurEnabled, blurStrength = blurStrength,
                                 originalAudioVolume = originalAudioVolume,
                                 salesSubtitleTimings = if (salesEditing) narrationTimings else emptyList(),
-                                salesSubtitleRegionIndex = selected)
+                                salesSubtitleRegionIndex = selected,
+                                onProgress = { exportProgress = it.coerceIn(0, 100) })
                         }.onSuccess { exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI" }
                          .onFailure { exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định") }
                         isExporting = false
@@ -225,7 +228,49 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
             }, enabled = !isExporting, modifier = Modifier.fillMaxWidth()) {
                 Text(if (isExporting) "ĐANG XUẤT VIDEO…" else "XUẤT VIDEO MP4 ĐÃ CHỈNH SỬA")
             }
-            Text(exportStatus, style = MaterialTheme.typography.bodySmall)
+            if (isExporting || exportProgress > 0) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                if (isExporting) "TIẾN ĐỘ XUẤT VIDEO" else "KẾT QUẢ XUẤT VIDEO",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Text(
+                                "$exportProgress%",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { exportProgress / 100f },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            exportStageLabel(exportProgress, isExporting),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            Text(
+                exportStatus,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (exportStatus.startsWith("Lỗi")) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (editableOverlays.isNotEmpty()) {
                 Text("CÁC ĐOẠN CHỮ ĐÃ NHẬN DIỆN", style=MaterialTheme.typography.labelLarge)
                 Column(Modifier.heightIn(max=160.dp).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(4.dp)) {
@@ -289,4 +334,15 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
 private fun clock(ms: Long): String {
     val s=ms.coerceAtLeast(0L)/1000L
     return "%02d:%02d".format(s/60L,s%60L)
+}
+
+
+private fun exportStageLabel(progress: Int, running: Boolean): String = when {
+    !running && progress >= 100 -> "Đã kiểm tra tệp MP4 và lưu vào Movies/LONGKAKA SELLER AI."
+    progress < 5 -> "Đang chuẩn bị dữ liệu và vùng xử lý…"
+    progress < 45 -> "Đang xử lý hình ảnh, làm sạch chữ gốc…"
+    progress < 50 -> "Đang kiểm tra video trung gian…"
+    progress < 95 -> "Đang kết xuất phụ đề và hoàn thiện hình ảnh, âm thanh…"
+    progress < 100 -> "Đang kiểm tra MP4 và lưu vào điện thoại…"
+    else -> "Hoàn tất."
 }
