@@ -136,8 +136,10 @@ internal object VideoTextBlur {
             Core.absdiff(gray, localBackground, contrast)
             // A stable low threshold catches thin anti-aliased strokes at every setting.
             // Higher strength expands the glyph mask and lets inpainting sample a wider rim.
-            Imgproc.threshold(contrast, mask, 12.0, 255.0, Imgproc.THRESH_BINARY)
-            val dilationPasses = if (strength >= 20f) 2 else 1
+            // A slightly more sensitive contrast threshold catches anti-aliased edges;
+            // two small dilations close pinholes without turning the whole OCR box into a mask.
+            Imgproc.threshold(contrast, mask, 9.0, 255.0, Imgproc.THRESH_BINARY)
+            val dilationPasses = if (strength >= 20f) 3 else 2
             Imgproc.dilate(mask, expandedMask, kernel, Point(-1.0, -1.0), dilationPasses)
             // Feather only the edge of the glyph mask. Transparent pixels outside it
             // let the live video frame show through instead of freezing a whole crop.
