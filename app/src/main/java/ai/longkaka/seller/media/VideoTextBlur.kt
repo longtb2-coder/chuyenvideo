@@ -172,9 +172,12 @@ internal object VideoTextBlur {
         if (glyphs.isEmpty() || track.observations.size < 2) return null
         val observedTimes = track.observations.map { it.timeMs }
         val candidates = mutableListOf<Long>()
-        var candidateTime = (track.timeMs - 750L).coerceAtLeast(0L)
-        val endTime = track.lastTimeMs + 750L
-        while (candidateTime <= endTime && candidates.size < 24) {
+        // Search only a short neighborhood around this patch. Never walk the entire
+        // duration of a long track when every sampled frame contains the overlay.
+        val searchStart = maxOf(0L, aroundTimeMs - 1_500L, track.timeMs - 750L)
+        val searchEnd = minOf(aroundTimeMs + 1_500L, track.lastTimeMs + 750L)
+        var candidateTime = searchStart
+        while (candidateTime <= searchEnd && candidates.size < 12) {
             if (observedTimes.none { kotlin.math.abs(it - candidateTime) <= 140L } &&
                 kotlin.math.abs(candidateTime - aroundTimeMs) >= 180L
             ) candidates += candidateTime
