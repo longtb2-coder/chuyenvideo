@@ -105,13 +105,13 @@ class ChineseOverlayTranslator(private val context: Context) {
 
     suspend fun scanAndTranslate(
         videoUri: Uri,
-        sampleIntervalMs: Long = 500L,
+        sampleIntervalMs: Long = 250L,
         maxFrames: Int = 3_600,
         category: ProductCategory = ProductCategory.AUTO,
         scanRegion: TextScanRegion = TextScanRegion.MAIN_CONTENT,
         onProgress: (Int) -> Unit = {}
     ): List<OnScreenText> {
-        require(sampleIntervalMs >= 500L) { "Khoảng lấy mẫu phải từ 0,5 giây trở lên." }
+        require(sampleIntervalMs >= 250L) { "Khoảng lấy mẫu tối thiểu là 0,25 giây." }
         require(maxFrames > 0) { "Số khung hình quét phải lớn hơn 0." }
 
         val retriever = MediaMetadataRetriever()
@@ -128,14 +128,19 @@ class ChineseOverlayTranslator(private val context: Context) {
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
             require(duration > 0L) { "Không đọc được thời lượng video." }
-            val frameCount = minOf(
-                ((duration + sampleIntervalMs - 1) / sampleIntervalMs).toInt().coerceAtLeast(1),
-                maxFrames
+            // Keep the requested dense interval for short clips. For long clips,
+            // widen it only as much as needed to stay under maxFrames while still scanning
+            // the entire duration (never stop sampling halfway through a long video).
+            val effectiveIntervalMs = maxOf(
+                sampleIntervalMs,
+                ((duration + maxFrames - 1) / maxFrames).coerceAtLeast(1L)
             )
+            val frameCount = ((duration + effectiveIntervalMs - 1) / effectiveIntervalMs)
+                .toInt().coerceIn(1, maxFrames)
             translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).awaitTask()
 
             for (index in 0 until frameCount) {
-                val timeMs = index * sampleIntervalMs
+                val timeMs = index * effectiveIntervalMs
                 val bitmap = withContext(Dispatchers.IO) {
                     retriever.getFrameAtTime(timeMs * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
                 }
