@@ -39,7 +39,7 @@ internal object VideoTextRemovalVerifier {
             check(durationMs > 0L) { "Video sau khi xóa chữ không hợp lệ." }
 
             // Cover the full duration while bounding the scan to 3,600 frames.
-            val intervalMs = maxOf(500L, ceil(durationMs / 3_600.0).toLong())
+            val intervalMs = maxOf(250L, ceil(durationMs / 3_600.0).toLong())
             val frameCount = ceil(durationMs.toDouble() / intervalMs).toInt().coerceAtLeast(1)
             for (index in 0 until frameCount) {
                 val timeMs = index * intervalMs
@@ -64,8 +64,10 @@ internal object VideoTextRemovalVerifier {
                                 originalTracks.any { track ->
                                     val visible = timeMs >= (track.timeMs - 500L).coerceAtLeast(0L) &&
                                         timeMs <= track.lastTimeMs + 500L
-                                    val sameOverlayText = resemblesOriginal(track.sourceText, text)
-                                    if (!visible || !sameOverlayText) false else {
+                                    // The OCR may read a partially erased or distorted
+                                    // remnant differently from the original phrase. Any Chinese
+                                    // glyph still inside the selected removal track is a failure.
+                                    if (!visible) false else {
                                         val target = track.boundsAt(timeMs) ?: if (track.observations.isEmpty()) {
                                             ai.longkaka.seller.translation.TextRegionObservation(
                                                 timeMs, track.left, track.top, track.right, track.bottom
