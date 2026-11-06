@@ -23,7 +23,7 @@ import org.opencv.photo.Photo
  * The surrounding video pixels are kept untouched; no rectangular blur panel is drawn.
  */
 internal object VideoTextBlur {
-    data class Patch(val timeMs: Long, val box: RenderBox, val bitmap: Bitmap)
+    data class Patch(val timeMs: Long, val box: RenderBox, val anchor: RenderBox, val bitmap: Bitmap)
 
     fun prepare(
         context: Context,
@@ -107,7 +107,14 @@ internal object VideoTextBlur {
                                             bottom = (mappedBottom - actualBox.top) / actualBox.height
                                         ).takeIf { it.right > it.left && it.bottom > it.top }
                                     }
-                                    patches += Patch(time, actualBox, restoreGlyphs(crop, strength, mappedGlyphs))
+                                    patches += Patch(
+                                        time,
+                                        actualBox,
+                                        RenderBox(observed.left, observed.top,
+                                            (observed.right - observed.left).coerceAtLeast(0.0001f),
+                                            (observed.bottom - observed.top).coerceAtLeast(0.0001f)),
+                                        restoreGlyphs(crop, strength, mappedGlyphs)
+                                    )
                                 } finally {
                                     crop.recycle()
                                 }
