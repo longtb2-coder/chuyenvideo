@@ -257,20 +257,33 @@ class VideoExporter(private val context: Context) {
                     if (blurThisOverlay && (trackVisible || captionNeedsStaticRegion)) {
                         val patch = blurSamples[index]?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
                         if (patch != null) {
-                            // Blur the entire selected replacement area, then render the
-                            // Vietnamese subtitle into that exact moving rectangle below.
-                            // The patch bitmap contains only the glyph-shaped alpha mask
-                            // for its own sampled OCR position. Draw it at that exact geometry;
-                            // stretching it over the full subtitle panel would misalign the mask.
-                            // Reposition the sampled glyph-shaped restoration patch to the
-                            // current OCR motion box. Keeping its original sample coordinates
-                            // caused moving text to leave uncovered trails.
-                            val destination = RectF(
-                                motionBox.left * canvas.width,
-                                motionBox.top * canvas.height,
-                                (motionBox.left + motionBox.width) * canvas.width,
-                                (motionBox.top + motionBox.height) * canvas.height
-                            )
+                            // The bitmap is a crop around the sampled OCR glyphs, not the
+                            // whole subtitle panel. Reproject that crop by the OCR track's
+                            // actual translation/scale since the sample time. This avoids
+                            // stretching a small glyph mask across the user-selected panel.
+                            val destination = if (observed != null) {
+                                val sampleWidth = patch.anchor.width.coerceAtLeast(0.0001f)
+                                val sampleHeight = patch.anchor.height.coerceAtLeast(0.0001f)
+                                val currentWidth = (observed.right - observed.left).coerceAtLeast(0.0001f)
+                                val currentHeight = (observed.bottom - observed.top).coerceAtLeast(0.0001f)
+                                val scaleX = (currentWidth / sampleWidth).coerceIn(0.5f, 2.5f)
+                                val scaleY = (currentHeight / sampleHeight).coerceIn(0.5f, 2.5f)
+                                val left = patch.box.left + observed.left - patch.anchor.left
+                                val top = patch.box.top + observed.top - patch.anchor.top
+                                RectF(
+                                    left * canvas.width,
+                                    top * canvas.height,
+                                    (left + patch.box.width * scaleX) * canvas.width,
+                                    (top + patch.box.height * scaleY) * canvas.height
+                                )
+                            } else {
+                                RectF(
+                                    patch.box.left * canvas.width,
+                                    patch.box.top * canvas.height,
+                                    (patch.box.left + patch.box.width) * canvas.width,
+                                    (patch.box.top + patch.box.height) * canvas.height
+                                )
+                            }
                             canvas.drawBitmap(patch.bitmap, null, destination, Paint(Paint.FILTER_BITMAP_FLAG))
                         }
                     }
