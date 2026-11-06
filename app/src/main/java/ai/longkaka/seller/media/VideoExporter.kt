@@ -593,6 +593,12 @@ object VideoRecoveryAdvisor {
             .take(8)
             .joinToString(" ") { (it.message ?: it.javaClass.simpleName).lowercase() }
         return when {
+            "vùng phụ đề quá nhỏ" in chain || "unreadably tiny" in chain ->
+                VideoRecoveryAdvice(
+                    "Vùng phụ đề chưa đủ rộng",
+                    "App đã chặn xuất để không tạo phụ đề quá nhỏ, khó đọc trên điện thoại.",
+                    "Rút gọn câu dịch trong ô chỉnh sửa rồi xuất lại. Không nên giảm cỡ chữ để ép nội dung vào vùng quá hẹp."
+                )
             "residual" in chain || "còn sót" in chain || "chữ trung" in chain ->
                 VideoRecoveryAdvice(
                     "Phục hồi chữ chưa đạt",
