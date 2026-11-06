@@ -2,6 +2,7 @@ package ai.longkaka.seller.media
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import ai.longkaka.seller.translation.OnScreenText
@@ -107,13 +108,28 @@ internal object VideoTextBlur {
                                             bottom = (mappedBottom - actualBox.top) / actualBox.height
                                         ).takeIf { it.right > it.left && it.bottom > it.top }
                                     }
+                                    val temporalDonor = findTemporalDonor(
+                                        retriever = retriever,
+                                        sourceFrame = crop,
+                                        region = region,
+                                        frameWidth = frame.width,
+                                        frameHeight = frame.height,
+                                        track = item,
+                                        aroundTimeMs = time,
+                                        glyphs = mappedGlyphs
+                                    )
+                                    val restored = try {
+                                        restoreGlyphs(crop, strength, mappedGlyphs, temporalDonor)
+                                    } finally {
+                                        temporalDonor?.recycle()
+                                    }
                                     patches += Patch(
                                         time,
                                         actualBox,
                                         RenderBox(observed.left, observed.top,
                                             (observed.right - observed.left).coerceAtLeast(0.0001f),
                                             (observed.bottom - observed.top).coerceAtLeast(0.0001f)),
-                                        restoreGlyphs(crop, strength, mappedGlyphs)
+                                        restored
                                     )
                                 } finally {
                                     crop.recycle()
@@ -137,7 +153,121 @@ internal object VideoTextBlur {
      * anti-aliased edges, then uses Telea inpainting to reconstruct the background.
      * strength controls the inpaint radius; it never selects Gaussian blur.
      */
-    private fun restoreGlyphs(source: Bitmap, strength: Float, glyphs: List<TextGlyphBox>): Bitmap {
+    /**
+     * Looks for a nearby frame where OCR did not observe this track. A temporal donor is
+     * accepted only when the glyph area has low local contrast and the surrounding crop
+     * still matches the current frame. This deliberately prefers safe inpainting over
+     * copying a misaligned moving background.
+     */
+    private fun findTemporalDonor(
+        retriever: MediaMetadataRetriever,
+        sourceFrame: Bitmap,
+        region: RenderBox,
+        frameWidth: Int,
+        frameHeight: Int,
+        track: OnScreenText,
+        aroundTimeMs: Long,
+        glyphs: List<TextGlyphBox>
+    ): Bitmap? {
+        if (glyphs.isEmpty() || track.observations.size < 2) return null
+        val observedTimes = track.observations.map { it.timeMs }
+        val candidates = mutableListOf<Long>()
+        var candidateTime = (track.timeMs - 750L).coerceAtLeast(0L)
+        val endTime = track.lastTimeMs + 750L
+        while (candidateTime <= endTime && candidates.size < 24) {
+            if (observedTimes.none { kotlin.math.abs(it - candidateTime) <= 140L } &&
+                kotlin.math.abs(candidateTime - aroundTimeMs) >= 180L
+            ) candidates += candidateTime
+            candidateTime += 250L
+        }
+        // Try only the closest six candidate frames to keep memory and decode time bounded.
+        for (time in candidates.sortedBy { kotlin.math.abs(it - aroundTimeMs) }.take(6)) {
+            val frame = runCatching {
+                retriever.getFrameAtTime(time * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
+            }.getOrNull() ?: continue
+            try {
+                if (frame.width != frameWidth || frame.height != frameHeight) continue
+                val x = (region.left * frame.width).toInt().coerceIn(0, frame.width - 1)
+                val y = (region.top * frame.height).toInt().coerceIn(0, frame.height - 1)
+                val width = (region.width * frame.width).toInt().coerceAtLeast(1).coerceAtMost(frame.width - x)
+                val height = (region.height * frame.height).toInt().coerceAtLeast(1).coerceAtMost(frame.height - y)
+                val donor = Bitmap.createBitmap(frame, x, y, width, height)
+                if (isSafeTemporalDonor(sourceFrame, donor, glyphs)) return donor
+                donor.recycle()
+            } finally {
+                frame.recycle()
+            }
+        }
+        return null
+    }
+
+    private fun isSafeTemporalDonor(
+        current: Bitmap,
+        donor: Bitmap,
+        glyphs: List<TextGlyphBox>
+    ): Boolean {
+        if (current.width != donor.width || current.height != donor.height) return false
+        // Compare a sparse grid outside the glyph boxes. A moving scene or a scene cut
+        // must not be copied into the current frame.
+        val stepX = (current.width / 36).coerceAtLeast(1)
+        val stepY = (current.height / 28).coerceAtLeast(1)
+        var difference = 0.0
+        var samples = 0
+        for (y in stepY until current.height step stepY) {
+            for (x in stepX until current.width step stepX) {
+                val nx = x.toFloat() / current.width
+                val ny = y.toFloat() / current.height
+                val insideGlyph = glyphs.any { nx >= it.left && nx <= it.right && ny >= it.top && ny <= it.bottom }
+                if (insideGlyph) continue
+                val a = current.getPixel(x, y)
+                val b = donor.getPixel(x, y)
+                difference += (kotlin.math.abs(Color.red(a) - Color.red(b)) +
+                    kotlin.math.abs(Color.green(a) - Color.green(b)) +
+                    kotlin.math.abs(Color.blue(a) - Color.blue(b))) / 3.0
+                samples++
+            }
+        }
+        if (samples < 20 || difference / samples > 18.0) return false
+
+        val donorRgba = Mat()
+        val donorGray = Mat()
+        val donorBackground = Mat()
+        val donorContrast = Mat()
+        try {
+            Utils.bitmapToMat(donor, donorRgba)
+            Imgproc.cvtColor(donorRgba, donorGray, Imgproc.COLOR_RGBA2GRAY)
+            Imgproc.GaussianBlur(donorGray, donorBackground, Size(0.0, 0.0), 3.0)
+            Core.absdiff(donorGray, donorBackground, donorContrast)
+            var highContrast = 0
+            var total = 0
+            glyphs.forEach { glyph ->
+                val left = (glyph.left * donor.width).toInt().coerceIn(0, donor.width - 1)
+                val top = (glyph.top * donor.height).toInt().coerceIn(0, donor.height - 1)
+                val right = (glyph.right * donor.width).toInt().coerceIn(left + 1, donor.width)
+                val bottom = (glyph.bottom * donor.height).toInt().coerceIn(top + 1, donor.height)
+                for (yy in top until bottom step 2) {
+                    for (xx in left until right step 2) {
+                        if (donorContrast.get(yy, xx)[0] > 18.0) highContrast++
+                        total++
+                    }
+                }
+            }
+            // Reject donors that still look like text or contain strong edges in the mask.
+            return total >= 8 && highContrast.toDouble() / total <= 0.18
+        } finally {
+            donorRgba.release()
+            donorGray.release()
+            donorBackground.release()
+            donorContrast.release()
+        }
+    }
+
+    private fun restoreGlyphs(
+        source: Bitmap,
+        strength: Float,
+        glyphs: List<TextGlyphBox>,
+        temporalDonor: Bitmap? = null
+    ): Bitmap {
         val rgba = Mat()
         val rgb = Mat()
         val gray = Mat()
@@ -209,6 +339,21 @@ internal object VideoTextBlur {
             } catch (_: Throwable) {
                 // NS is a different reconstruction method, not a blur fallback.
                 Photo.inpaint(rgb, expandedMask, restoredRgb, radius, Photo.INPAINT_NS)
+            }
+            // If a nearby clean frame passed both the text-residual and background-
+            // similarity checks, prefer its real pixels inside the glyph mask. Otherwise
+            // keep the on-device inpainting result; never force a mismatched donor.
+            if (temporalDonor != null && temporalDonor.width == source.width && temporalDonor.height == source.height) {
+                val donorRgba = Mat()
+                val donorRgb = Mat()
+                try {
+                    Utils.bitmapToMat(temporalDonor, donorRgba)
+                    Imgproc.cvtColor(donorRgba, donorRgb, Imgproc.COLOR_RGBA2RGB)
+                    donorRgb.copyTo(restoredRgb, expandedMask)
+                } finally {
+                    donorRgba.release()
+                    donorRgb.release()
+                }
             }
             Imgproc.cvtColor(restoredRgb, output, Imgproc.COLOR_RGB2RGBA)
             // Composite only restored glyph pixels. The current frame remains visible
