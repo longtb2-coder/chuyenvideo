@@ -268,8 +268,11 @@ class VideoExporter(private val context: Context) {
                                 val currentHeight = (observed.bottom - observed.top).coerceAtLeast(0.0001f)
                                 val scaleX = (currentWidth / sampleWidth).coerceIn(0.5f, 2.5f)
                                 val scaleY = (currentHeight / sampleHeight).coerceIn(0.5f, 2.5f)
-                                val left = patch.box.left + observed.left - patch.anchor.left
-                                val top = patch.box.top + observed.top - patch.anchor.top
+                                // Scale the crop offset from the OCR anchor as well as
+                                // the crop dimensions. Without this, a resized text track shifts
+                                // the restored pixels away from the glyphs and leaves halos.
+                                val left = observed.left + (patch.box.left - patch.anchor.left) * scaleX
+                                val top = observed.top + (patch.box.top - patch.anchor.top) * scaleY
                                 RectF(
                                     left * canvas.width,
                                     top * canvas.height,
@@ -331,12 +334,17 @@ class VideoExporter(private val context: Context) {
                     var lines = wrapAtCurrentSize()
                     // Fit every subtitle line inside its panel instead of clipping the last
                     // lines when the caption is longer than the selected region.
-                    while (fittedTextSize > 7f && lines.size * fittedTextSize * 1.18f > availableHeight) {
-                        fittedTextSize = (fittedTextSize - 1f).coerceAtLeast(7f)
+                    // Never silently export unreadably tiny captions. If the selected
+                    // subtitle region cannot hold the text at a readable size, stop and ask
+                    // for a larger region instead of shrinking down to 4-7 px.
+                    val minimumReadableSize = 24f
+                    while (fittedTextSize > minimumReadableSize &&
+                        lines.size * fittedTextSize * 1.18f > availableHeight) {
+                        fittedTextSize = (fittedTextSize - 1f).coerceAtLeast(minimumReadableSize)
                         lines = wrapAtCurrentSize()
                     }
-                    if (lines.isNotEmpty() && lines.size * fittedTextSize * 1.18f > availableHeight) {
-                        fittedTextSize = (availableHeight / (lines.size * 1.18f)).coerceAtLeast(4f)
+                    check(lines.isEmpty() || lines.size * fittedTextSize * 1.18f <= availableHeight) {
+                        "Vùng phụ đề quá nhỏ để hiển thị rõ. Hãy mở rộng vùng phụ đề hoặc rút gọn câu dịch rồi xuất lại."
                     }
                     textPaint.textSize = fittedTextSize
                     val lineHeight = fittedTextSize * 1.18f
