@@ -191,7 +191,15 @@ class VideoExporter(private val context: Context) {
                 typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
                 setShadowLayer(3f, 1f, 1f, Color.BLACK)
             }
-            private val textBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(105, 0, 0, 0) }
+            // Centered dark outline behind white text. A separate fill paint with
+            // default left alignment caused a second, offset copy of every subtitle.
+            private val textBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.BLACK
+                textAlign = Paint.Align.CENTER
+                typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
+                style = Paint.Style.STROKE
+                strokeJoin = Paint.Join.ROUND
+            }
 
             override fun onDraw(canvas: Canvas, presentationTimeUs: Long) {
                 val t = presentationTimeUs / 1000L
@@ -396,6 +404,8 @@ class VideoExporter(private val context: Context) {
                         "Vùng phụ đề quá nhỏ để hiển thị rõ. Hãy mở rộng vùng phụ đề hoặc rút gọn câu dịch rồi xuất lại."
                     }
                     textPaint.textSize = fittedTextSize
+                    textBg.textSize = fittedTextSize
+                    textBg.strokeWidth = (fittedTextSize * 0.12f).coerceIn(2f, 7f)
                     val lineHeight = fittedTextSize * 1.18f
                     val blockHeight = lines.size * lineHeight
                     val centerX = (left + right) / 2f
@@ -465,6 +475,8 @@ class VideoExporter(private val context: Context) {
                     check(dialogueLines.size <= 3) {
                         "Cụm phụ đề vẫn quá dài so với vùng chữ đã phục hồi. Hãy mở rộng vùng phục hồi hoặc rút gọn câu; app không cắt mất chữ."
                     }
+                    textBg.textSize = size
+                    textBg.strokeWidth = (size * 0.12f).coerceIn(2f, 7f)
                     val lineHeight = size * 1.16f
                     val blockHeight = dialogueLines.size * lineHeight
                     check(blockHeight <= bottom - top) {
