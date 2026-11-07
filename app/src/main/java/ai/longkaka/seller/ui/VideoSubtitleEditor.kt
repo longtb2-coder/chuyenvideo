@@ -222,9 +222,9 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                             Text("Chế độ: Tự động có kiểm soát • ưu tiên chất lượng hình ảnh.")
-                            Text("Vùng phục hồi nền: \${blurEnabled.count { it }}")
-                            Text("Vùng phụ đề/khung thay thế: \${if (salesEditing) coverEnabled.count { it } else editableOverlays.size}")
-                            Text("Giọng VieNeu: \${if (narrationFile?.exists() == true) "Đã sẵn sàng" else "Không dùng"}")
+                            Text("Vùng phục hồi nền: ${blurEnabled.count { it }}")
+                            Text("Vùng phụ đề/khung thay thế: ${if (salesEditing) coverEnabled.count { it } else editableOverlays.size}")
+                            Text("Giọng VieNeu: ${if (narrationFile?.exists() == true) "Đã sẵn sàng" else "Không dùng"}")
                             Text("Quy trình: tìm khung hình sạch gần kề nếu đủ an toàn → OpenCV Telea → Navier‑Stokes dự phòng → quét OCR kiểm tra chữ Trung còn sót.")
                             Text("Video gốc được giữ nguyên. Nếu kiểm tra phát hiện chữ còn sót hoặc phụ đề không đủ chỗ hiển thị, app sẽ dừng và báo vùng cần xử lý.")
                             Text("Bạn nên phát thử vài đoạn có chữ chuyển động trước khi xác nhận xuất.")
