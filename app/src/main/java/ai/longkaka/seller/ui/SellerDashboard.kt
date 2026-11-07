@@ -55,6 +55,13 @@ import ai.longkaka.seller.sales.SalesVideoFrameSampler
 import ai.longkaka.seller.sales.SalesSpeechTranscriber
 import ai.longkaka.seller.sales.SalesSpeechLanguage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import ai.longkaka.seller.speech.vieneu.VieNeuSynthesisWorker
 import java.util.Locale
 
 enum class SellerWorkflowMode { SHORT_FILM, SALES_VIDEO }
@@ -103,6 +110,10 @@ fun SellerDashboard() {
     var narrationTimings by remember { mutableStateOf<List<VieNeuChunkTiming>>(emptyList()) }
     var salesCopyStyle by remember { mutableStateOf(SalesCopyStyle.FRIENDLY) }
     var salesCopyLength by remember { mutableStateOf(SalesCopyLength.STANDARD) }
+    var autoPipelineActive by remember { mutableStateOf(false) }
+    var autoPipelineProgress by remember { mutableIntStateOf(0) }
+    var autoPipelineStatus by remember { mutableStateOf("Sẵn sàng chạy quy trình tự động miễn phí.") }
+    var autoExportRequested by remember { mutableStateOf(false) }
 
     val salesAnalysisSummary = remember(translatedOverlays, editedTranslations, spokenTranscript, salesAnalysisFrames.size) {
         SalesAnalysisSummaryBuilder.build(
@@ -148,6 +159,132 @@ fun SellerDashboard() {
         importStatus = error.message ?: "Không thể nhận video. Vui lòng thử lại."
         isImporting = false
     }
+
+    /**
+     * One-tap, free-first workflow. Local OCR/translation and factual copy are
+     * followed by the durable VieNeu background worker and the existing MP4 exporter.
+     */
+    fun runAutomaticPipeline() {
+        val video = importedVideo ?: return
+        if (autoPipelineActive) return
+        scope.launch {
+            autoPipelineActive = true
+            autoPipelineProgress = 0
+            autoPipelineStatus = "Bắt đầu phân tích video…"
+            val videoUri = Uri.parse(video.contentUri)
+            try {
+                autoPipelineStatus = "Đang trích xuất storyboard theo thứ tự thời gian…"
+                salesAnalysisFrames = runCatching {
+                    salesFrameSampler.createStoryboard(videoUri)
+                }.getOrElse {
+                    salesFrameStatus = it.message ?: "Không trích xuất được storyboard."
+                    emptyList()
+                }
+                check(importedVideo?.contentUri == video.contentUri) { "Video đã thay đổi; tác vụ cũ đã dừng." }
+                autoPipelineProgress = 12
+                salesFrameStatus = "Đã trích xuất \${salesAnalysisFrames.size} khung hình phân tích."
+
+                autoPipelineStatus = "Đang quét chữ Trung và dịch sang tiếng Việt…"
+                translatedOverlays = overlayTranslator.scanAndTranslate(
+                    videoUri,
+                    category = selectedCategory,
+                    onProgress = { value -> autoPipelineProgress = 12 + (value * 38 / 100) }
+                )
+                check(importedVideo?.contentUri == video.contentUri) { "Video đã thay đổi; tác vụ cũ đã dừng." }
+                editedTranslations = emptyMap()
+                scanStatus = if (translatedOverlays.isEmpty()) {
+                    "Không phát hiện được vùng chữ Trung đủ tin cậy."
+                } else {
+                    "Đã nhận diện và dịch \${translatedOverlays.size} vùng chữ."
+                }
+                autoPipelineProgress = 52
+
+                autoPipelineStatus = "Đang nhận diện lời thoại gốc…"
+                spokenTranscript = runCatching {
+                    salesSpeechTranscriber.transcribe(
+                        videoUri,
+                        salesSpeechLanguage,
+                        onStatus = { salesSpeechStatus = it }
+                    )
+                }.getOrDefault("")
+                check(importedVideo?.contentUri == video.contentUri) { "Video đã thay đổi; tác vụ cũ đã dừng." }
+                salesSpeechStatus = if (spokenTranscript.isBlank()) {
+                    "Không nhận diện được lời thoại rõ ràng; kịch bản chỉ dùng chữ đã đọc được."
+                } else {
+                    "Đã nhận diện lời thoại gốc."
+                }
+                autoPipelineProgress = 62
+
+                autoPipelineStatus = "Đang tạo kịch bản bán hàng từ dữ liệu đã nhận diện…"
+                val factualInputs = translatedOverlays.map { it.vietnameseText } +
+                    spokenTranscript.lines().filter { it.isNotBlank() }
+                val script = SalesScriptBuilder.build(
+                    brief = SalesProductBrief(
+                        productName = productName,
+                        audience = targetCustomer,
+                        problem = customerProblem,
+                        benefits = productBenefits,
+                        verifiedFacts = verifiedProductFacts,
+                        priceAndOffer = productOffer,
+                        callToAction = salesCallToAction
+                    ),
+                    recognizedVideoText = factualInputs,
+                    style = salesCopyStyle,
+                    length = salesCopyLength
+                ).asText()
+                check(script.isNotBlank()) { "Không tạo được kịch bản từ dữ liệu video." }
+                generatedSalesScript = script
+                autoPipelineProgress = 68
+
+                autoPipelineStatus = "Đang đưa giọng VieNeu Nano vào xử lý nền…"
+                val scriptFolder = File(context.filesDir, "LONGKAKA SELLER AI/jobs")
+                withContext(Dispatchers.IO) {
+                    check(scriptFolder.exists() || scriptFolder.mkdirs()) {
+                        "Không tạo được thư mục lưu tác vụ tự động."
+                    }
+                }
+                val scriptFile = File(scriptFolder, "auto_script_\${System.currentTimeMillis()}.txt")
+                withContext(Dispatchers.IO) { scriptFile.writeText(script, Charsets.UTF_8) }
+                val request = OneTimeWorkRequestBuilder<VieNeuSynthesisWorker>()
+                    .setInputData(workDataOf(
+                        VieNeuSynthesisWorker.KEY_TEXT_FILE to scriptFile.absolutePath,
+                        VieNeuSynthesisWorker.KEY_VOICE to "Mỹ Duyên"
+                    ))
+                    .build()
+                val workManager = WorkManager.getInstance(context)
+                workManager.enqueue(request)
+                val completed = workManager.getWorkInfoByIdFlow(request.id).first { info ->
+                    info != null && info.state.isFinished
+                } ?: error("Không nhận được kết quả tạo giọng VieNeu.")
+                check(completed.state == androidx.work.WorkInfo.State.SUCCEEDED) {
+                    completed.outputData.getString(VieNeuSynthesisWorker.KEY_ERROR)
+                        ?: "Tạo giọng VieNeu thất bại."
+                }
+                val audioPath = completed.outputData.getString(VieNeuSynthesisWorker.KEY_OUTPUT_FILE)
+                    ?: error("Tác vụ VieNeu không trả về tệp âm thanh.")
+                val audioFile = File(audioPath)
+                check(audioFile.isFile && audioFile.length() > 44L) {
+                    "Tệp giọng đọc VieNeu không hợp lệ."
+                }
+                val timingFile = File(audioFile.parentFile, "\${audioFile.nameWithoutExtension}.srt")
+                val timings = readAutoVieNeuTimings(timingFile)
+                check(timings.isNotEmpty()) { "Không đọc được mốc phụ đề đồng bộ từ VieNeu." }
+
+                narrationFile = audioFile
+                narrationTimings = timings
+                autoPipelineProgress = 100
+                autoPipelineStatus = "Đã phân tích và tạo giọng đọc. Đang mở bước xuất MP4 tự động…"
+                workflowMode = SellerWorkflowMode.SALES_VIDEO
+                workflowStep = 2
+                autoExportRequested = true
+            } catch (error: Throwable) {
+                autoPipelineStatus = "Quy trình tự động dừng an toàn: \${error.message ?: error.javaClass.simpleName}"
+            } finally {
+                autoPipelineActive = false
+            }
+        }
+    }
+
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null && !isImporting) {
@@ -403,6 +540,30 @@ fun SellerDashboard() {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("PHÂN TÍCH SẢN PHẨM & VIẾT KỊCH BẢN BẰNG AI", style = MaterialTheme.typography.titleSmall)
+                            Text("CHẾ ĐỘ TỰ ĐỘNG • ƯU TIÊN CHẤT LƯỢNG • MIỄN PHÍ",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary)
+                            Text("Một lần chạm để trích xuất cảnh, quét/dịch chữ, nhận diện lời thoại, tạo kịch bản an toàn theo dữ liệu có sẵn, tạo giọng VieNeu offline và chuyển thẳng sang xuất MP4.",
+                                style = MaterialTheme.typography.bodySmall)
+                            Button(
+                                onClick = { runAutomaticPipeline() },
+                                enabled = importedVideo != null && !autoPipelineActive &&
+                                    !isPreparingSalesFrames && !isScanning && !isTranscribingSalesSpeech,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (autoPipelineActive) "ĐANG TỰ ĐỘNG XỬ LÝ…" else "TỰ ĐỘNG LÀM VIDEO BÁN HÀNG")
+                            }
+                            if (autoPipelineActive || autoPipelineProgress > 0) {
+                                LinearProgressIndicator(
+                                    progress = { autoPipelineProgress / 100f },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            Text(autoPipelineStatus, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Lưu ý: chế độ miễn phí tạo kịch bản từ OCR/lời thoại trên máy; không tự gọi dịch vụ AI trả phí hay tự khẳng định thông số sản phẩm chưa xác minh.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("Một lần phân tích duy nhất: app lấy ảnh cảnh quay, chữ trên hình và lời thoại; sau đó gửi cùng thông tin bạn xác nhận sang ChatGPT/Gemini để AI quan sát sản phẩm và viết lời bán hàng.", style = MaterialTheme.typography.bodySmall)
                             OutlinedButton(
                                 enabled = !isTranscribingSalesSpeech,
@@ -573,7 +734,9 @@ fun SellerDashboard() {
                         onTextChange = { index, value -> editedTranslations = editedTranslations + (index to value) },
                         salesEditing = workflowMode == SellerWorkflowMode.SALES_VIDEO,
                         narrationFile = if (workflowMode == SellerWorkflowMode.SALES_VIDEO) narrationFile else null,
-                        narrationTimings = if (workflowMode == SellerWorkflowMode.SALES_VIDEO) narrationTimings else emptyList()
+                        narrationTimings = if (workflowMode == SellerWorkflowMode.SALES_VIDEO) narrationTimings else emptyList(),
+                        autoExport = autoExportRequested,
+                        onAutoExportStarted = { autoExportRequested = false }
                     )
                 }
 
@@ -597,6 +760,25 @@ fun SellerDashboard() {
         }
         AppUpdateCard()
         Spacer(Modifier.height(10.dp))
+    }
+}
+
+private fun readAutoVieNeuTimings(file: File): List<VieNeuChunkTiming> {
+    if (!file.isFile) return emptyList()
+    val pattern = Regex("""(\d{2}):(\d{2}):(\d{2}),(\d{3})""")
+    fun parse(value: String): Long {
+        val match = pattern.find(value) ?: return 0L
+        val (hours, minutes, seconds, millis) = match.destructured
+        return hours.toLong() * 3_600_000L + minutes.toLong() * 60_000L +
+            seconds.toLong() * 1_000L + millis.toLong()
+    }
+    return file.readText(Charsets.UTF_8).split(Regex("""\r?\n\s*\r?\n""")).mapNotNull { block ->
+        val lines = block.lines()
+        val range = lines.firstOrNull { it.contains(" --> ") } ?: return@mapNotNull null
+        val times = range.split(" --> ", limit = 2)
+        if (times.size != 2) return@mapNotNull null
+        val text = lines.dropWhile { it != range }.drop(1).joinToString("\n").trim()
+        if (text.isBlank()) null else VieNeuChunkTiming(text, parse(times[0]), parse(times[1]))
     }
 }
 
