@@ -307,67 +307,8 @@ internal class VieNeuNanoEngine(
         return ids.toLongArray()
     }
 
-    private data class TextChunk(val text: String, val pauseAfterSeconds: Float)
-
-    private fun splitIntoChunks(source: String): List<TextChunk> {
-        val result = ArrayList<TextChunk>()
-        val paragraphs = source.replace("\r", "").split(Regex("\\n+")).filter { it.isNotBlank() }
-        paragraphs.forEachIndexed { paragraphIndex, paragraph ->
-            val sentences = paragraph.split(Regex("""(?<=[.!?…])\s+""")).filter { it.isNotBlank() }
-            var current = StringBuilder()
-            fun flush(pause: Float) {
-                val value = current.toString().trim()
-                if (value.isNotEmpty()) result += TextChunk(value, pause)
-                current = StringBuilder()
-            }
-            sentences.forEach { rawSentence ->
-                val sentence = rawSentence.trim()
-                if (sentence.length <= MAX_PHONEME_CHARS) {
-                    if (current.isNotEmpty() && current.length + 1 + sentence.length > MAX_PHONEME_CHARS) {
-                        flush(0.50f)
-                    }
-                    if (current.isNotEmpty()) current.append(' ')
-                    current.append(sentence)
-                } else {
-                    if (current.isNotEmpty()) flush(0.50f)
-                    val words = sentence.split(Regex("\\s+"))
-                    var part = StringBuilder()
-                    words.forEach { word ->
-                        if (part.isNotEmpty() && part.length + 1 + word.length > MAX_PHONEME_CHARS) {
-                            result += TextChunk(part.toString(), 0.30f)
-                            part = StringBuilder()
-                        }
-                        if (part.isNotEmpty()) part.append(' ')
-                        part.append(word)
-                    }
-                    if (part.isNotEmpty()) current.append(part)
-                }
-            }
-            if (current.isNotEmpty()) {
-                flush(if (paragraphIndex < paragraphs.lastIndex) 0.70f else 0f)
-            }
-        }
-        var index = 0
-        while (result.size > 1 && index < result.size) {
-            if (result[index].text.trim().length >= 20) {
-                index++
-                continue
-            }
-            if (index < result.lastIndex) {
-                val current = result[index]
-                val next = result[index + 1]
-                result[index] = TextChunk(current.text + " " + next.text, next.pauseAfterSeconds)
-                result.removeAt(index + 1)
-            } else {
-                val previous = result[index - 1]
-                val current = result[index]
-                result[index - 1] = TextChunk(previous.text + " " + current.text, current.pauseAfterSeconds)
-                result.removeAt(index)
-                index--
-            }
-        }
-        return result
-    }
+    private fun splitIntoChunks(source: String): List<VieNeuTextChunk> =
+        VieNeuTextChunker.split(source)
 
     private fun trimAndFade(input: FloatArray): FloatArray {
         if (input.isEmpty()) return input
