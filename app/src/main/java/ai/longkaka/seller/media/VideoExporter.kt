@@ -199,6 +199,31 @@ class VideoExporter(private val context: Context) {
                         (item.right - item.left).coerceAtLeast(0f),
                         (item.bottom - item.top).coerceAtLeast(0f))
                 }
+
+                // Use the same expanded, motion-tracked area that VideoTextBlur restored,
+                // not just the tight OCR glyph bounds. This gives the replacement caption
+                // the full user-selected clean patch while preserving its movement.
+                fun restoredCaptionRegionAt(index: Int): RenderBox {
+                    val item = overlays[index]
+                    val selected = covers[index]
+                    val observed = item.boundsAt(t) ?: return selected
+                    val defaultLeft = (item.left - 0.025f).coerceAtLeast(0f)
+                    val defaultTop = (item.top - 0.025f).coerceAtLeast(0f)
+                    val defaultRight = (item.right + 0.025f).coerceAtMost(1f)
+                    val defaultBottom = (item.bottom + 0.025f).coerceAtMost(1f)
+                    val defaultWidth = (defaultRight - defaultLeft).coerceAtLeast(0.01f)
+                    val defaultHeight = (defaultBottom - defaultTop).coerceAtLeast(0.01f)
+                    val scaleX = (selected.width / defaultWidth).coerceIn(0.5f, 2.5f)
+                    val scaleY = (selected.height / defaultHeight).coerceIn(0.5f, 2.5f)
+                    val left = (observed.left - 0.025f + selected.left - defaultLeft).coerceIn(0f, 1f)
+                    val top = (observed.top - 0.025f + selected.top - defaultTop).coerceIn(0f, 1f)
+                    return RenderBox(
+                        left,
+                        top,
+                        ((observed.right - observed.left + 0.05f) * scaleX).coerceAtMost(1f - left),
+                        ((observed.bottom - observed.top + 0.05f) * scaleY).coerceAtMost(1f - top)
+                    )
+                }
                 fun overlapRatio(a: RenderBox, b: RenderBox): Float {
                     val width = (minOf(a.left + a.width, b.left + b.width) - maxOf(a.left, b.left)).coerceAtLeast(0f)
                     val height = (minOf(a.top + a.height, b.top + b.height) - maxOf(a.top, b.top)).coerceAtLeast(0f)
@@ -383,15 +408,21 @@ class VideoExporter(private val context: Context) {
                     // Prefer the actual regions whose Chinese glyphs were restored.
                     // The voice chunk timing is the master clock; the selected restored
                     // region supplies only the on-screen placement and motion.
-                    val restoredCaptionRegions = subtitleFollowsMotionIndices
+                    val activeRestoredIndices = subtitleFollowsMotionIndices
                         .filter { index ->
                             val item = overlays[index]
                             t >= (item.timeMs - 500L).coerceAtLeast(0L) &&
                                 t <= item.lastTimeMs + 500L && item.boundsAt(t) != null
                         }
-                        .map { regionAt(it) }
-                    val captionBox = SpeechCaptionPlacement.chooseRestoredRegion(restoredCaptionRegions)
-                        ?: SubtitleLayerLayout.dialogueCaptionBox(occupied)
+                    val restoredCaptionRegions = activeRestoredIndices.map { restoredCaptionRegionAt(it) }
+                    // The editor's selected region wins over larger unrelated OCR regions.
+                    val preferredRestoredRegion = activeRestoredIndices
+                        .firstOrNull { it == salesSubtitleRegionIndex }
+                        ?.let { restoredCaptionRegionAt(it) }
+                    val captionBox = SpeechCaptionPlacement.chooseRestoredRegion(
+                        restoredCaptionRegions,
+                        preferredRestoredRegion
+                    ) ?: SubtitleLayerLayout.dialogueCaptionBox(occupied)
                     val left = captionBox.left * canvas.width
                     val top = captionBox.top * canvas.height
                     val right = (captionBox.left + captionBox.width) * canvas.width
@@ -413,12 +444,18 @@ class VideoExporter(private val context: Context) {
                         return lines
                     }
                     var dialogueLines = wrapDialogue()
-                    while (dialogueLines.size > 3 && size > 20f) {
-                        size -= 1f
+                    while (dialogueLines.size > 3 && size > 24f) {
+                        size = (size - 2f).coerceAtLeast(24f)
                         dialogueLines = wrapDialogue()
+                    }
+                    check(dialogueLines.size <= 3) {
+                        "Cụm phụ đề vẫn quá dài so với vùng chữ đã phục hồi. Hãy mở rộng vùng phục hồi hoặc rút gọn câu; app không cắt mất chữ."
                     }
                     val lineHeight = size * 1.16f
                     val blockHeight = dialogueLines.size * lineHeight
+                    check(blockHeight <= bottom - top) {
+                        "Vùng chữ đã phục hồi quá thấp để hiển thị phụ đề rõ. Hãy tăng chiều cao vùng phục hồi."
+                    }
                     val centerX = (left + right) / 2f
                     val firstBaseline = top + ((bottom - top - blockHeight) / 2f).coerceAtLeast(0f) + size
                     canvas.save()
