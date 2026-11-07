@@ -38,8 +38,8 @@ internal object OverlayScanCodec {
                                         .put("bottom", glyph.bottom))
                                 }
                             })
-                    }
-                })
+                    })
+                }))
         }
     }.toString()
 
