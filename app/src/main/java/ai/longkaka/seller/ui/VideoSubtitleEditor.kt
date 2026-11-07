@@ -45,6 +45,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     var exportStatus by remember { mutableStateOf("Chưa xuất video.") }
     var exportProgress by remember { mutableIntStateOf(0) }
     var recoveryAdvice by remember { mutableStateOf<VideoRecoveryAdvice?>(null) }
+    var showExportReview by remember { mutableStateOf(false) }
     val exporter = remember(context) { VideoExporter(context.applicationContext) }
     val exoPlayer = remember(videoUri) {
         ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(videoUri)); prepare(); playWhenReady = false }
@@ -155,7 +156,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                                     change.consume()
                                     covers = covers.toMutableList().also { it[selected] = cover.copy(left=(cover.left+drag.x/bw).coerceIn(0f,1f-cover.width), top=(cover.top+drag.y/bh).coerceIn(0f,1f-cover.height)) }
                                 } }, contentAlignment=Alignment.Center) {
-                                Text("VÙNG LÀM MỜ", color=Color.White, fontSize=11.sp)
+                                Text("VÙNG PHỤC HỒI", color=Color.White, fontSize=11.sp)
                             }
                         } else if (layer == EditorLayer.COVER && coverEnabled[selected]) {
                             Box(Modifier.offset { IntOffset((previewLeft*bw).roundToInt(), (previewTop*bh).roundToInt()) }
@@ -207,33 +208,68 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                 Text("Mức này được áp dụng cả khi xem trước và khi xuất MP4. Có thể hạ âm thanh gốc để lời thuyết minh nổi bật hơn.",
                     style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Button(onClick = {
-                if (!isExporting) {
-                    isExporting = true
-                    exportProgress = 0
-                    exportStatus = "Đang chuẩn bị xuất video…"
-                    recoveryAdvice = null
-                    scope.launch {
-                        runCatching {
-                            exporter.export(videoUri, editableOverlays,
-                                translations.map { RenderBox(it.left,it.top,it.width,it.height) },
-                                covers.map { RenderBox(it.left,it.top,it.width,it.height) },
-                                if (salesEditing) coverEnabled else editableOverlays.map { false }, coverColor, coverAlpha, textSize, editedTexts, narrationFile,
-                                blurEnabled = blurEnabled, blurStrength = blurStrength,
-                                originalAudioVolume = originalAudioVolume,
-                                salesSubtitleTimings = if (salesEditing) narrationTimings else emptyList(),
-                                salesSubtitleRegionIndex = selected,
-                                onProgress = { exportProgress = it.coerceIn(0, 100) })
-                        }.onSuccess { exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI"; recoveryAdvice = null }
-                         .onFailure {
-                             recoveryAdvice = VideoRecoveryAdvisor.diagnose(it)
-                             exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định")
-                         }
-                        isExporting = false
+            Button(
+                onClick = { showExportReview = true },
+                enabled = !isExporting,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isExporting) "ĐANG XUẤT VIDEO…" else "KIỂM TRA & XUẤT VIDEO MP4")
+            }
+            if (showExportReview) {
+                AlertDialog(
+                    onDismissRequest = { showExportReview = false },
+                    title = { Text("KIỂM TRA TRƯỚC KHI XUẤT") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Text("Chế độ: Tự động có kiểm soát • ưu tiên chất lượng hình ảnh.")
+                            Text("Vùng phục hồi nền: \${blurEnabled.count { it }}")
+                            Text("Vùng phụ đề/khung thay thế: \${if (salesEditing) coverEnabled.count { it } else editableOverlays.size}")
+                            Text("Giọng VieNeu: \${if (narrationFile?.exists() == true) "Đã sẵn sàng" else "Không dùng"}")
+                            Text("Quy trình: tìm khung hình sạch gần kề nếu đủ an toàn → OpenCV Telea → Navier‑Stokes dự phòng → quét OCR kiểm tra chữ Trung còn sót.")
+                            Text("Video gốc được giữ nguyên. Nếu kiểm tra phát hiện chữ còn sót hoặc phụ đề không đủ chỗ hiển thị, app sẽ dừng và báo vùng cần xử lý.")
+                            Text("Bạn nên phát thử vài đoạn có chữ chuyển động trước khi xác nhận xuất.")
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showExportReview = false
+                            if (!isExporting) {
+                                isExporting = true
+                                exportProgress = 0
+                                exportStatus = "Đang chuẩn bị xử lý chất lượng cao…"
+                                recoveryAdvice = null
+                                scope.launch {
+                                    runCatching {
+                                        exporter.export(
+                                            videoUri,
+                                            editableOverlays,
+                                            translations.map { RenderBox(it.left, it.top, it.width, it.height) },
+                                            covers.map { RenderBox(it.left, it.top, it.width, it.height) },
+                                            if (salesEditing) coverEnabled else editableOverlays.map { false },
+                                            coverColor, coverAlpha, textSize, editedTexts, narrationFile,
+                                            blurEnabled = blurEnabled,
+                                            blurStrength = blurStrength,
+                                            originalAudioVolume = originalAudioVolume,
+                                            salesSubtitleTimings = if (salesEditing) narrationTimings else emptyList(),
+                                            salesSubtitleRegionIndex = selected,
+                                            onProgress = { exportProgress = it.coerceIn(0, 100) }
+                                        )
+                                    }.onSuccess {
+                                        exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI"
+                                        recoveryAdvice = null
+                                    }.onFailure {
+                                        recoveryAdvice = VideoRecoveryAdvisor.diagnose(it)
+                                        exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định")
+                                    }
+                                    isExporting = false
+                                }
+                            }
+                        }) { Text("XÁC NHẬN XUẤT") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showExportReview = false }) { Text("QUAY LẠI KIỂM TRA") }
                     }
-                }
-            }, enabled = !isExporting, modifier = Modifier.fillMaxWidth()) {
-                Text(if (isExporting) "ĐANG XUẤT VIDEO…" else "XUẤT VIDEO MP4 ĐÃ CHỈNH SỬA")
+                )
             }
             if (isExporting || exportProgress > 0) {
                 Card(
@@ -310,16 +346,16 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     } else {
                         FilterChip(selected=layer==EditorLayer.TRANSLATION,onClick={layer=EditorLayer.TRANSLATION},label={Text("Chỉnh phụ đề")})
                     }
-                    FilterChip(selected=layer==EditorLayer.BLUR,onClick={layer=EditorLayer.BLUR},label={Text("Làm mờ chữ")})
+                    FilterChip(selected=layer==EditorLayer.BLUR,onClick={layer=EditorLayer.BLUR},label={Text("Phục hồi nền chữ")})
                 }
                 if (layer == EditorLayer.BLUR) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Checkbox(checked=blurEnabled[selected],onCheckedChange={ v -> blurEnabled=blurEnabled.toMutableList().also { it[selected]=v } })
-                        Text("Bật làm mờ cho đoạn chữ này")
+                        Text("Bật tự động phục hồi nền cho đoạn chữ này")
                     }
-                    Text("Cường độ làm mờ: ${blurStrength.roundToInt()}")
+                    Text("Mức phục hồi chi tiết: ${blurStrength.roundToInt()}")
                     Slider(value=blurStrength,onValueChange={blurStrength=it},valueRange=3f..28f)
-                    Text("Làm mờ vùng chữ gốc, sau đó chèn phụ đề tiếng Việt trực tiếp lên vùng mờ. Vùng xử lý bám theo chuyển động đã nhận diện.")
+                    Text("Ưu tiên khôi phục điểm ảnh nền thay vì phủ một hình chữ nhật mờ. App tự chọn khung hình lân cận khi đủ an toàn; nếu không, dùng OpenCV cục bộ. Vùng phục hồi bám theo vị trí chữ đã nhận diện.")
                 } else if(salesEditing && layer==EditorLayer.COVER) {
                     Text("Chiều rộng khung: ${(covers[selected].width*100).roundToInt()}%")
                     Slider(value=covers[selected].width,onValueChange={ v -> covers=covers.toMutableList().also { it[selected]=it[selected].copy(width=v.coerceIn(.05f,maxOf(.05f,1f-covers[selected].left))) } },valueRange=.05f..1f)
@@ -346,7 +382,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
                     Text("Cỡ chữ dịch: ${textSize.roundToInt()} sp")
                     Slider(value=textSize,onValueChange={textSize=it},valueRange=10f..28f)
                 }
-                Text(if (layer == EditorLayer.BLUR) "Kéo vùng làm mờ để chỉnh vị trí. Khi bật, phụ đề tiếng Việt sẽ được chèn lên trên vùng đã làm mờ trong video xuất ra." else if (salesEditing) "Kéo lớp trên video để đổi vị trí. Các chỉnh sửa được áp dụng khi xuất MP4." else "Kéo phụ đề trên video để đổi vị trí. Chỉ bản dịch đã sửa được ghi vào MP4; âm thanh và hình ảnh gốc được giữ nguyên.", style=MaterialTheme.typography.bodySmall)
+                Text(if (layer == EditorLayer.BLUR) "Kéo vùng phục hồi để chỉnh vị trí. Khi bật, app phục hồi nền chữ rồi chèn phụ đề tiếng Việt lên đúng vùng đó." else if (salesEditing) "Kéo lớp trên video để đổi vị trí. Các chỉnh sửa được áp dụng khi xuất MP4." else "Kéo phụ đề trên video để đổi vị trí. Chỉ bản dịch đã sửa được ghi vào MP4; âm thanh và hình ảnh gốc được giữ nguyên.", style=MaterialTheme.typography.bodySmall)
             } else Text("Chưa có đoạn chữ để chỉnh. Hãy quét chữ Trung trước.", style=MaterialTheme.typography.bodySmall)
         }
     }
