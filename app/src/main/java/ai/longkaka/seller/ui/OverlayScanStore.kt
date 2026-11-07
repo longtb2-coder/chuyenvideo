@@ -10,38 +10,45 @@ import org.json.JSONObject
 
 /** Persists OCR wording, timing, glyph masks and motion geometry before video restoration. */
 internal object OverlayScanCodec {
-    fun encode(items: List<OnScreenText>): String = JSONArray().apply {
+    fun encode(items: List<OnScreenText>): String {
+        val tracks = JSONArray()
         items.forEach { item ->
-            put(JSONObject()
-                .put("source", item.sourceText)
-                .put("translated", item.vietnameseText)
-                .put("start", item.timeMs)
-                .put("end", item.lastTimeMs)
-                .put("left", item.left)
-                .put("top", item.top)
-                .put("right", item.right)
-                .put("bottom", item.bottom)
-                .put("observations", JSONArray().apply {
-                    item.observations.forEach { observation ->
-                        put(JSONObject()
-                            .put("time", observation.timeMs)
-                            .put("left", observation.left)
-                            .put("top", observation.top)
-                            .put("right", observation.right)
-                            .put("bottom", observation.bottom)
-                            .put("glyphs", JSONArray().apply {
-                                observation.glyphs.forEach { glyph ->
-                                    put(JSONObject()
-                                        .put("left", glyph.left)
-                                        .put("top", glyph.top)
-                                        .put("right", glyph.right)
-                                        .put("bottom", glyph.bottom))
-                                }
-                            })
-                    })
-                }))
+            val observations = JSONArray()
+            item.observations.forEach { observation ->
+                val glyphs = JSONArray()
+                observation.glyphs.forEach { glyph ->
+                    val glyphJson = JSONObject()
+                    glyphJson.put("left", glyph.left)
+                    glyphJson.put("top", glyph.top)
+                    glyphJson.put("right", glyph.right)
+                    glyphJson.put("bottom", glyph.bottom)
+                    glyphs.put(glyphJson)
+                }
+
+                val observationJson = JSONObject()
+                observationJson.put("time", observation.timeMs)
+                observationJson.put("left", observation.left)
+                observationJson.put("top", observation.top)
+                observationJson.put("right", observation.right)
+                observationJson.put("bottom", observation.bottom)
+                observationJson.put("glyphs", glyphs)
+                observations.put(observationJson)
+            }
+
+            val trackJson = JSONObject()
+            trackJson.put("source", item.sourceText)
+            trackJson.put("translated", item.vietnameseText)
+            trackJson.put("start", item.timeMs)
+            trackJson.put("end", item.lastTimeMs)
+            trackJson.put("left", item.left)
+            trackJson.put("top", item.top)
+            trackJson.put("right", item.right)
+            trackJson.put("bottom", item.bottom)
+            trackJson.put("observations", observations)
+            tracks.put(trackJson)
         }
-    }.toString()
+        return tracks.toString()
+    }
 
     fun decode(raw: String): List<OnScreenText> = runCatching {
         val array = JSONArray(raw)
