@@ -45,16 +45,20 @@ internal object VideoTextBlur {
 
         val retriever = MediaMetadataRetriever()
         val result = linkedMapOf<Int, MutableList<Patch>>()
-        // Keep memory bounded on phones: distribute at most 160 source-frame patches
-        // over all OCR tracks, while ensuring every track receives at least two samples.
-        val perRegionBudget = (160 / active.size).coerceAtLeast(2)
+        // Keep patch memory bounded, but allocate samples by each text track's
+        // visible duration. A long-lived track must not receive the same tiny budget
+        // as a short caption that appears for only a second.
+        val sampleBudgets = TextRestorationQuality.allocateSampleCounts(
+            observationCounts = active.map { overlays[it].observations.size },
+            durationsMs = active.map { (overlays[it].lastTimeMs - overlays[it].timeMs).coerceAtLeast(0L) }
+        )
         try {
             retriever.setDataSource(context, source)
-            active.forEach { index ->
+            active.forEachIndexed { activePosition, index ->
                 val item = overlays[index]
                 val selected = boxes[index]
                 val observations = item.observations
-                val sampleCount = minOf(observations.size, perRegionBudget).coerceAtLeast(1)
+                val sampleCount = sampleBudgets[activePosition].coerceAtLeast(1)
                 val selectedObservations = if (observations.size <= sampleCount) observations else
                     (0 until sampleCount).map { sampleIndex ->
                         observations[(sampleIndex.toLong() * (observations.lastIndex) / (sampleCount - 1).coerceAtLeast(1)).toInt()]
