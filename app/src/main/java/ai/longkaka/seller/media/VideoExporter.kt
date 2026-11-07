@@ -364,23 +364,12 @@ class VideoExporter(private val context: Context) {
                 // track. They no longer replace OCR translations or borrow one OCR box.
                 if (drawSubtitles && activeSalesCaption != null && activeSalesCaption.text.isNotBlank()) {
                     val caption = activeSalesCaption.text.trim()
-                    val candidateBottom = RenderBox(0.04f, 0.79f, 0.92f, 0.17f)
-                    val candidateTop = RenderBox(0.04f, 0.04f, 0.92f, 0.17f)
                     val occupied = overlays.indices.filter { index ->
                         val item = overlays[index]
                         t >= (item.timeMs - 500L).coerceAtLeast(0L) &&
                             t <= item.lastTimeMs + 500L && item.boundsAt(t) != null
                     }.map { regionAt(it) }
-                    fun collisionCost(candidate: RenderBox): Float = occupied.sumOf { box ->
-                        val w = (minOf(candidate.left + candidate.width, box.left + box.width) -
-                            maxOf(candidate.left, box.left)).coerceAtLeast(0f)
-                        val h = (minOf(candidate.top + candidate.height, box.top + box.height) -
-                            maxOf(candidate.top, box.top)).coerceAtLeast(0f)
-                        (w * h).toDouble()
-                    }.toFloat()
-                    val captionBox = if (collisionCost(candidateBottom) <= collisionCost(candidateTop)) {
-                        candidateBottom
-                    } else candidateTop
+                    val captionBox = SubtitleLayerLayout.dialogueCaptionBox(occupied)
                     val left = captionBox.left * canvas.width
                     val top = captionBox.top * canvas.height
                     val right = (captionBox.left + captionBox.width) * canvas.width
