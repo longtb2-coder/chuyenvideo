@@ -38,8 +38,8 @@ internal object VideoTextRemovalVerifier {
                 ?.toLongOrNull() ?: error("Không đọc được thời lượng video sau khi xóa chữ.")
             check(durationMs > 0L) { "Video sau khi xóa chữ không hợp lệ." }
 
-            // Cover the full duration while bounding the scan to 3,600 frames.
-            val intervalMs = maxOf(250L, ceil(durationMs / 3_600.0).toLong())
+            // Scan more densely to catch short-lived residual glyphs while bounding work to 3,600 frames.
+            val intervalMs = maxOf(100L, ceil(durationMs / 3_600.0).toLong())
             val frameCount = ceil(durationMs.toDouble() / intervalMs).toInt().coerceAtLeast(1)
             for (index in 0 until frameCount) {
                 val timeMs = index * intervalMs
@@ -67,7 +67,7 @@ internal object VideoTextRemovalVerifier {
                                     // Only a residual resembling the original target text is
                                     // a removal failure. Unrelated Chinese printed elsewhere in
                                     // the selected box must not abort an otherwise clean export.
-                                    if (!visible || !TextRestorationQuality.matchesOriginal(track.sourceText, text)) {
+                                    if (!visible) {
                                         false
                                     } else {
                                         val target = track.boundsAt(timeMs) ?: if (track.observations.isEmpty()) {
