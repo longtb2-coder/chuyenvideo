@@ -85,18 +85,33 @@ internal object OverlayScanCodec {
 }
 
 internal class OverlayScanStore(context: Context) {
-    private val preferences = context.applicationContext
-        .getSharedPreferences("overlay_scan_metadata_v1", Context.MODE_PRIVATE)
+    private val directory = java.io.File(context.applicationContext.filesDir, "overlay_scans").apply {
+        check(exists() || mkdirs()) { "Không tạo được thư mục lưu dữ liệu quét video." }
+    }
 
     fun save(videoUri: Uri, overlays: List<OnScreenText>) {
-        preferences.edit().putString(key(videoUri), OverlayScanCodec.encode(overlays)).apply()
+        val destination = fileFor(videoUri)
+        val temporary = java.io.File(directory, destination.name + ".part")
+        try {
+            temporary.writeText(OverlayScanCodec.encode(overlays), Charsets.UTF_8)
+            if (destination.exists()) check(destination.delete()) { "Không thay thế được dữ liệu quét cũ." }
+            check(temporary.renameTo(destination)) { "Không hoàn tất được dữ liệu quét video." }
+        } finally {
+            temporary.delete()
+        }
     }
 
     fun load(videoUri: Uri): List<OnScreenText>? {
-        val raw = preferences.getString(key(videoUri), null) ?: return null
-        return OverlayScanCodec.decode(raw)
+        val source = fileFor(videoUri)
+        if (!source.isFile) return null
+        return runCatching { OverlayScanCodec.decode(source.readText(Charsets.UTF_8)) }
+            .getOrDefault(emptyList())
     }
 
-    private fun key(uri: Uri): String =
-        "video_" + uri.toString().hashCode().toUInt().toString(16)
+    private fun fileFor(uri: Uri): java.io.File {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(uri.toString().toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        return java.io.File(directory, "$digest.json")
+    }
 }
