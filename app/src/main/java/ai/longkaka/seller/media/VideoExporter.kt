@@ -167,6 +167,20 @@ class VideoExporter(private val context: Context) {
         val hasNarration = narrationFile != null && narrationFile.exists() && narrationFile.length() > 44L
         require(narrationFile == null || hasNarration) { "Tệp giọng đọc không tồn tại hoặc bị lỗi. Hãy tạo lại giọng đọc trước khi xuất." }
         require(salesSubtitleTimings.isEmpty() || hasNarration || allowSubtitleWithoutNarration) { "Có phụ đề đồng bộ giọng đọc nhưng chưa có tệp giọng đọc hợp lệ." }
+        if (hasNarration) {
+            val narrationProbe = MediaMetadataRetriever()
+            val narrationDurationMs = try {
+                narrationProbe.setDataSource(narrationFile!!.absolutePath)
+                narrationProbe.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            } finally {
+                narrationProbe.release()
+            }
+            require(narrationDurationMs > 0L) { "Không đọc được thời lượng tệp giọng đọc. Hãy tạo lại giọng đọc trước khi xuất." }
+            require(narrationDurationMs <= sourceDurationMs + 250L) {
+                val excessSeconds = ((narrationDurationMs - sourceDurationMs).coerceAtLeast(0L) / 1000.0)
+                "Giọng đọc dài hơn video khoảng %.1f giây. App đã dừng để không tự cắt mất lời đọc hoặc làm phụ đề lệch tiếng. Cần kéo dài video hoặc rút gọn lời đọc rồi xuất lại.".format(java.util.Locale.ROOT, excessSeconds)
+            }
+        }
         val temp = File(context.cacheDir, "seller_export_" + System.currentTimeMillis() + ".mp4")
         val blurSamples = if (blurEnabled.any { it }) withContext(Dispatchers.IO) { VideoTextBlur.prepare(context, source, overlays, covers, blurStrength) } else emptyMap()
         val overlay = object : CanvasOverlay(true) {
@@ -502,15 +516,15 @@ class VideoExporter(private val context: Context) {
                 .build()
         }
         if (hasNarration) {
-            val durationRetriever = MediaMetadataRetriever()
-            val durationMs = try {
-                durationRetriever.setDataSource(context, source)
-                durationRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            } finally { durationRetriever.release() }
-            require(durationMs > 0L) { "Không đọc được thời lượng video để ghép giọng đọc." }
+            // The preflight check above guarantees the narration fits. Keep a small
+            // muxer tolerance, but never silently clip a longer voice track.
             val narrationItem = MediaItem.Builder()
                 .setUri(Uri.fromFile(narrationFile))
-                .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setEndPositionMs(durationMs).build())
+                .setClippingConfiguration(
+                    MediaItem.ClippingConfiguration.Builder()
+                        .setEndPositionMs(sourceDurationMs + 250L)
+                        .build()
+                )
                 .build()
             val narrationEdited = EditedMediaItem.Builder(narrationItem).setRemoveVideo(true).build()
             compositionSequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
@@ -700,6 +714,12 @@ object VideoRecoveryAdvisor {
             .take(8)
             .joinToString(" ") { (it.message ?: it.javaClass.simpleName).lowercase() }
         return when {
+            "giọng đọc dài hơn video" in chain ->
+                VideoRecoveryAdvice(
+                    "Giọng đọc dài hơn video",
+                    "App đã phát hiện phần lời đọc sẽ bị cắt nếu tiếp tục xuất theo thời lượng video gốc.",
+                    "Kéo dài video nguồn hoặc rút gọn nội dung đọc để khớp thời lượng. App không tự cắt mất câu cuối."
+                )
             "vùng phụ đề quá nhỏ" in chain || "unreadably tiny" in chain ->
                 VideoRecoveryAdvice(
                     "Vùng phụ đề chưa đủ rộng",
