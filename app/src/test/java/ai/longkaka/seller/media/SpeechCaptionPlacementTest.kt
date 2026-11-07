@@ -13,6 +13,20 @@ class SpeechCaptionPlacementTest {
     }
 
     @Test
+    fun prefersTheRegionSelectedInTheEditor() {
+        val selected = RenderBox(0.10f, 0.35f, 0.32f, 0.12f)
+        val larger = RenderBox(0.08f, 0.70f, 0.78f, 0.18f)
+        assertEquals(selected, SpeechCaptionPlacement.chooseRestoredRegion(listOf(larger, selected), selected))
+    }
+
+    @Test
+    fun fallsBackToLargestRegionWhenPreferredRegionIsTooSmall() {
+        val tiny = RenderBox(0.20f, 0.40f, 0.15f, 0.04f)
+        val larger = RenderBox(0.08f, 0.70f, 0.78f, 0.18f)
+        assertEquals(larger, SpeechCaptionPlacement.chooseRestoredRegion(listOf(tiny, larger), tiny))
+    }
+
+    @Test
     fun ignoresRegionsTooSmallForReadableCaption() {
         val tiny = RenderBox(0.20f, 0.40f, 0.15f, 0.04f)
         assertNull(SpeechCaptionPlacement.chooseRestoredRegion(listOf(tiny)))
