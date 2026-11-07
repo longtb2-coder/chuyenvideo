@@ -11,11 +11,11 @@ internal object VieNeuTextChunker {
 
     fun split(source: String, maxChars: Int = MAX_CAPTION_CHARS): List<VieNeuTextChunk> {
         require(maxChars >= 16) { "Giới hạn cụm đọc quá ngắn." }
-        val paragraphs = source.replace("\\r", "").split(Regex("\\n+")).filter { it.isNotBlank() }
+        val paragraphs = source.replace("\r", "").split(Regex("""\n+""")).filter { it.isNotBlank() }
         val result = mutableListOf<VieNeuTextChunk>()
 
         paragraphs.forEach { paragraph ->
-            val sentences = paragraph.split(Regex("""(?<=[.!?…])\\s+""")).filter { it.isNotBlank() }
+            val sentences = paragraph.split(Regex("""(?<=[.!?…])\s+""")).filter { it.isNotBlank() }
             var pending = StringBuilder()
 
             fun flushPending() {
@@ -55,7 +55,7 @@ internal object VieNeuTextChunker {
     private fun splitLongSentence(sentence: String, maxChars: Int): List<String> {
         // Prefer punctuation/clause boundaries. Only break at word boundaries when a
         // single clause is still too long for a compact on-screen caption.
-        val clauses = sentence.split(Regex("""(?<=[,，;；:：])\\s+""")).filter { it.isNotBlank() }
+        val clauses = sentence.split(Regex("""(?<=[,，;；:：])\s+""")).filter { it.isNotBlank() }
         val units = mutableListOf<String>()
         clauses.forEach { clause ->
             if (clause.length <= maxChars) {
@@ -83,7 +83,7 @@ internal object VieNeuTextChunker {
     private fun splitAtWords(text: String, maxChars: Int): List<String> {
         val parts = mutableListOf<String>()
         var current = StringBuilder()
-        text.trim().split(Regex("\\s+")).forEach { word ->
+        text.trim().split(Regex("""\s+""")).forEach { word ->
             val length = if (current.isEmpty()) word.length else current.length + 1 + word.length
             if (current.isNotEmpty() && length > maxChars) {
                 parts += current.toString()
