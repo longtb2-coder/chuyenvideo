@@ -73,6 +73,7 @@ fun SellerDashboard() {
     val importer = remember(context) { VideoImportRepository(context.applicationContext) }
     val library = remember(context) { VideoLibraryRepository(context.applicationContext) }
     val overlayTranslator = remember(context) { ChineseOverlayTranslator(context.applicationContext) }
+    val overlayScanStore = remember(context) { OverlayScanStore(context.applicationContext) }
     val salesFrameSampler = remember(context) { SalesVideoFrameSampler(context.applicationContext) }
     val salesSpeechTranscriber = remember(context) { SalesSpeechTranscriber(context.applicationContext) }
     var salesAnalysisFrames by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -151,7 +152,9 @@ fun SellerDashboard() {
         salesFrameStatus = "Video đã thay đổi. Hãy trích xuất lại ảnh phân tích."
         spokenTranscript = ""
         salesSpeechStatus = "Video đã thay đổi. Hãy nhận diện lại lời thoại."
-        translatedOverlays = emptyList()
+        translatedOverlays = overlayScanStore.load(Uri.parse(video.contentUri)).orEmpty()
+        scanStatus = if (translatedOverlays.isEmpty()) "Chưa có dữ liệu OCR đã lưu cho video này." else
+            "Đã khôi phục ${translatedOverlays.size} vùng chữ và tọa độ đã quét trước đó."
         editedTranslations = emptyMap()
     }
 
@@ -190,6 +193,7 @@ fun SellerDashboard() {
                     category = selectedCategory,
                     onProgress = { value -> autoPipelineProgress = 12 + (value * 38 / 100) }
                 )
+                overlayScanStore.save(videoUri, translatedOverlays)
                 check(importedVideo?.contentUri == video.contentUri) { "Video đã thay đổi; tác vụ cũ đã dừng." }
                 editedTranslations = emptyMap()
                 scanStatus = if (translatedOverlays.isEmpty()) {
@@ -463,7 +467,9 @@ fun SellerDashboard() {
                                 salesFrameStatus = "Video đã thay đổi. Hãy trích xuất lại ảnh phân tích."
                                 spokenTranscript = ""
                                 salesSpeechStatus = "Video đã thay đổi. Hãy nhận diện lại lời thoại."
-                                translatedOverlays = emptyList()
+                                translatedOverlays = overlayScanStore.load(Uri.parse(video.contentUri)).orEmpty()
+                                scanStatus = if (translatedOverlays.isEmpty()) "Chưa có dữ liệu OCR đã lưu cho video này." else
+                                    "Đã khôi phục ${translatedOverlays.size} vùng chữ và tọa độ đã quét trước đó."
                                 editedTranslations = emptyMap()
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -514,6 +520,7 @@ fun SellerDashboard() {
                                         category = selectedCategory,
                                         onProgress = { scanProgress = it }
                                     )
+                                    overlayScanStore.save(Uri.parse(video.contentUri), translatedOverlays)
                                     scanStatus = if (translatedOverlays.isEmpty()) {
                                         "Không tìm thấy đoạn chữ Trung đủ tin cậy trong video."
                                     } else {
@@ -605,6 +612,7 @@ fun SellerDashboard() {
                                                         category = selectedCategory,
                                                         onProgress = { scanProgress = it }
                                                     )
+                                                    overlayScanStore.save(videoUri, translatedOverlays)
                                                     if (importedVideo?.contentUri != video.contentUri) return@launch
                                                     scanStatus = if (translatedOverlays.isEmpty())
                                                         "Không tìm thấy vùng chữ Trung đủ tin cậy."
