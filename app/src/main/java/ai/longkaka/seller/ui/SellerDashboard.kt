@@ -182,7 +182,7 @@ fun SellerDashboard() {
                 }
                 check(importedVideo?.contentUri == video.contentUri) { "Video đã thay đổi; tác vụ cũ đã dừng." }
                 autoPipelineProgress = 12
-                salesFrameStatus = "Đã trích xuất \${salesAnalysisFrames.size} khung hình phân tích."
+                salesFrameStatus = "Đã trích xuất ${salesAnalysisFrames.size} khung hình phân tích."
 
                 autoPipelineStatus = "Đang quét chữ Trung và dịch sang tiếng Việt…"
                 translatedOverlays = overlayTranslator.scanAndTranslate(
@@ -195,7 +195,7 @@ fun SellerDashboard() {
                 scanStatus = if (translatedOverlays.isEmpty()) {
                     "Không phát hiện được vùng chữ Trung đủ tin cậy."
                 } else {
-                    "Đã nhận diện và dịch \${translatedOverlays.size} vùng chữ."
+                    "Đã nhận diện và dịch ${translatedOverlays.size} vùng chữ."
                 }
                 autoPipelineProgress = 52
 
@@ -243,7 +243,7 @@ fun SellerDashboard() {
                         "Không tạo được thư mục lưu tác vụ tự động."
                     }
                 }
-                val scriptFile = File(scriptFolder, "auto_script_\${System.currentTimeMillis()}.txt")
+                val scriptFile = File(scriptFolder, "auto_script_${System.currentTimeMillis()}.txt")
                 withContext(Dispatchers.IO) { scriptFile.writeText(script, Charsets.UTF_8) }
                 val request = OneTimeWorkRequestBuilder<VieNeuSynthesisWorker>()
                     .setInputData(workDataOf(
@@ -266,7 +266,7 @@ fun SellerDashboard() {
                 check(audioFile.isFile && audioFile.length() > 44L) {
                     "Tệp giọng đọc VieNeu không hợp lệ."
                 }
-                val timingFile = File(audioFile.parentFile, "\${audioFile.nameWithoutExtension}.srt")
+                val timingFile = File(audioFile.parentFile, "${audioFile.nameWithoutExtension}.srt")
                 val timings = readAutoVieNeuTimings(timingFile)
                 check(timings.isNotEmpty()) { "Không đọc được mốc phụ đề đồng bộ từ VieNeu." }
 
@@ -278,7 +278,7 @@ fun SellerDashboard() {
                 workflowStep = 2
                 autoExportRequested = true
             } catch (error: Throwable) {
-                autoPipelineStatus = "Quy trình tự động dừng an toàn: \${error.message ?: error.javaClass.simpleName}"
+                autoPipelineStatus = "Quy trình tự động dừng an toàn: ${error.message ?: error.javaClass.simpleName}"
             } finally {
                 autoPipelineActive = false
             }
