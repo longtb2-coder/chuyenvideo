@@ -15,7 +15,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 
-/** Imports videos into the phone's shared Movies/LONGKAKA SELLER AI folder. */
+/** Keeps selected device videos in place; only direct-link downloads create a new media file. */
 class VideoImportRepository(private val context: Context) {
     companion object {
         private const val MIN_FREE_BYTES = 128L * 1024L * 1024L
@@ -23,36 +23,34 @@ class VideoImportRepository(private val context: Context) {
         private const val PUBLIC_FOLDER = "Movies/LONGKAKA SELLER AI"
     }
 
+    /**
+     * Registers the selected device video by its existing content URI.
+     * Copying it into Movies would create an unnecessary second full-size file.
+     */
     suspend fun importFromUri(uri: Uri, onProgress: (Int) -> Unit = {}): ImportedVideo =
         withContext(Dispatchers.IO) {
             val resolver = context.contentResolver
-            val metadata = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
-                ?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val ni = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                        val si = cursor.getColumnIndex(OpenableColumns.SIZE)
-                        (if (ni >= 0) cursor.getString(ni) else null) to
-                            (if (si >= 0 && !cursor.isNull(si)) cursor.getLong(si) else -1L)
-                    } else null
-                } ?: (null to -1L)
+            val metadata = resolver.query(
+                uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    (if (nameIndex >= 0) cursor.getString(nameIndex) else null) to
+                        (if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else -1L)
+                } else null
+            } ?: (null to -1L)
 
-            val name = sanitize(metadata.first ?: "video_${UUID.randomUUID()}.mp4")
+            val name = metadata.first?.takeIf { it.isNotBlank() }
+                ?: ("video_" + UUID.randomUUID().toString() + ".mp4")
             val mime = resolver.getType(uri)?.takeIf { it.startsWith("video/") }
                 ?: mimeFromName(name) ?: "video/mp4"
-            ensureSpace(metadata.second)
-            val destination = createDestination(name, mime)
-            try {
-                resolver.openInputStream(uri)?.use { input ->
-                    resolver.openOutputStream(destination, "w")?.use { output ->
-                        copyStream(input, output, metadata.second, onProgress)
-                    } ?: throw IllegalStateException("Không mở được tệp đích trong bộ nhớ điện thoại.")
-                } ?: throw IllegalStateException("Không thể đọc video từ vị trí đã chọn.")
-                publish(destination)
-                inspect(destination, name, mime, ImportSource.DEVICE)
-            } catch (error: Throwable) {
-                resolver.delete(destination, null, null)
-                throw error
-            }
+
+            // Inspect and retain the original URI; do not create a MediaStore copy.
+            val video = inspect(uri, name, mime, ImportSource.DEVICE)
+            onProgress(100)
+            video
         }
 
     suspend fun importFromDirectLink(rawUrl: String, onProgress: (Int) -> Unit = {}): ImportedVideo =

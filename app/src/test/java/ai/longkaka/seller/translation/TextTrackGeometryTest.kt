@@ -60,7 +60,7 @@ class TextTrackGeometryTest {
             observations = listOf(TextRegionObservation(0L, 0.1f, 0.2f, 0.3f, 0.4f),
                 TextRegionObservation(1_000L, 0.2f, 0.3f, 0.4f, 0.5f))
         )
-        assertEquals(0.2f, track.boundsAt(1_250L)!!.left, 0.0001f)
+        assertEquals(0.225f, track.boundsAt(1_250L)!!.left, 0.0001f)
         assertNull(track.boundsAt(1_501L))
     }
 
@@ -90,6 +90,23 @@ class TextTrackGeometryTest {
                 TextRegionObservation(5_000L, 0.3f, 0.4f, 0.5f, 0.6f))
         )
         assertEquals(0.3f, track.boundsAt(5_000L)!!.left, 0.0001f)
+    }
+
+    @Test
+    fun mainContentRegionAcceptsTextInsideTheProductFrame() {
+        assertEquals(true, TextScanRegion.MAIN_CONTENT.accepts(.2f, .2f, .8f, .3f))
+    }
+
+    @Test
+    fun mainContentRegionRejectsTextOutsideTheFrame() {
+        assertEquals(false, TextScanRegion.MAIN_CONTENT.accepts(.0f, .0f, .2f, .04f))
+    }
+
+    @Test
+    fun customRegionCanTargetAnOffCenterProductFrame() {
+        val region = TextScanRegion(.12f, .18f, .88f, .82f)
+        assertEquals(true, region.accepts(.2f, .3f, .7f, .5f))
+        assertEquals(false, region.accepts(.0f, .3f, .1f, .5f))
     }
 
 }
