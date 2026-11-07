@@ -186,6 +186,12 @@ fun SellerDashboard() {
             Text("● SẴN SÀNG", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
         }
         Text("Không gian làm video", style = MaterialTheme.typography.headlineSmall)
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("TỰ ĐỘNG CÓ KIỂM SOÁT • ƯU TIÊN CHẤT LƯỢNG", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("App tự phân tích ảnh, chữ và lời thoại; tự chọn cách phục hồi nền miễn phí trên điện thoại. Bạn vẫn được xem trước, sửa bản dịch/vùng xử lý và xác nhận trước khi xuất. Nếu kiểm tra chất lượng phát hiện chữ còn sót hoặc phụ đề khó đọc, app sẽ báo lỗi thay vì âm thầm xuất bản lỗi.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
