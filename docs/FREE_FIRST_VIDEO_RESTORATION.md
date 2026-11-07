@@ -83,3 +83,20 @@ Record residual Chinese, mask leakage, seams, blur, temporal flicker, subtitle
 legibility, audio sync, export stability, peak memory, and processing time.
 
 A successful Android build is not evidence of visually successful restoration.
+
+## Controlled quality-first user flow
+
+The editor now uses a review gate before starting export. The user can preview the
+source, select each detected text region, adjust its restoration area and subtitle,
+then explicitly confirm the MP4 export. The review summarizes restoration regions,
+replacement regions, narration availability, and the automatic local fallback order.
+
+The UI calls this operation **background restoration**, not blur: the selected
+glyph-shaped mask is reconstructed with a safe nearby donor when one passes the
+similarity/residual checks, otherwise OpenCV Telea is used with Navier-Stokes as
+the exception fallback. The original source is never overwritten. The post-pass
+Chinese OCR verifier and subtitle readability guard remain blocking checks.
+
+This mode does not promise perfect recovery where the overlay permanently hides
+unique moving detail. In those cases, the correct behavior is to stop and report
+the affected region rather than claim a clean export.
