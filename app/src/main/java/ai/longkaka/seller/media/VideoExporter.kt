@@ -314,7 +314,13 @@ class VideoExporter(private val context: Context) {
                     val bottom = (b.top + b.height) * canvas.height
                     // OCR translation is its own visual layer: it always follows the
                     // original on-screen text geometry, independent of spoken dialogue.
-                    val text = if (drawSubtitles) {
+                    // During narration export, the restored OCR regions selected for
+                    // replacement are reserved for the spoken Vietnamese caption. Do not
+                    // also paint the static OCR translation there: that created two captions
+                    // occupying the same cleaned patch.
+                    val isNarrationCaptionRegion = salesSubtitleTimings.isNotEmpty() &&
+                        index in subtitleFollowsMotionIndices
+                    val text = if (drawSubtitles && !isNarrationCaptionRegion) {
                         editedTexts[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText
                     } else ""
                     if (text.isBlank()) return@forEachIndexed
@@ -374,7 +380,18 @@ class VideoExporter(private val context: Context) {
                         t >= (item.timeMs - 500L).coerceAtLeast(0L) &&
                             t <= item.lastTimeMs + 500L && item.boundsAt(t) != null
                     }.map { regionAt(it) }
-                    val captionBox = SubtitleLayerLayout.dialogueCaptionBox(occupied)
+                    // Prefer the actual regions whose Chinese glyphs were restored.
+                    // The voice chunk timing is the master clock; the selected restored
+                    // region supplies only the on-screen placement and motion.
+                    val restoredCaptionRegions = subtitleFollowsMotionIndices
+                        .filter { index ->
+                            val item = overlays[index]
+                            t >= (item.timeMs - 500L).coerceAtLeast(0L) &&
+                                t <= item.lastTimeMs + 500L && item.boundsAt(t) != null
+                        }
+                        .map { regionAt(it) }
+                    val captionBox = SpeechCaptionPlacement.chooseRestoredRegion(restoredCaptionRegions)
+                        ?: SubtitleLayerLayout.dialogueCaptionBox(occupied)
                     val left = captionBox.left * canvas.width
                     val top = captionBox.top * canvas.height
                     val right = (captionBox.left + captionBox.width) * canvas.width
