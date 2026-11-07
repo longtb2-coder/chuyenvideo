@@ -38,7 +38,7 @@ private enum class EditorLayer { TRANSLATION, COVER, BLUR }
 private data class EditableOverlay(val left: Float, val top: Float, val width: Float, val height: Float)
 
 @Composable
-fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts: Map<Int, String>, onTextChange: (Int, String) -> Unit, salesEditing: Boolean = false, narrationFile: File? = null, narrationTimings: List<VieNeuChunkTiming> = emptyList()) {
+fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts: Map<Int, String>, onTextChange: (Int, String) -> Unit, salesEditing: Boolean = false, narrationFile: File? = null, narrationTimings: List<VieNeuChunkTiming> = emptyList(), autoExport: Boolean = false, onAutoExportStarted: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isExporting by remember { mutableStateOf(false) }
@@ -46,6 +46,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     var exportProgress by remember { mutableIntStateOf(0) }
     var recoveryAdvice by remember { mutableStateOf<VideoRecoveryAdvice?>(null) }
     var showExportReview by remember { mutableStateOf(false) }
+    var autoExportStarted by remember(videoUri) { mutableStateOf(false) }
     val exporter = remember(context) { VideoExporter(context.applicationContext) }
     val exoPlayer = remember(videoUri) {
         ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(videoUri)); prepare(); playWhenReady = false }
@@ -123,6 +124,45 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
         }
     }
     LaunchedEffect(selected, editableOverlays) { editableOverlays.getOrNull(selected)?.let { exoPlayer.seekTo(it.timeMs.coerceAtLeast(0L)) } }
+
+    LaunchedEffect(autoExport, narrationFile, durationMs) {
+        if (autoExport && narrationFile?.exists() == true && durationMs > 0L && !autoExportStarted) {
+            autoExportStarted = true
+            onAutoExportStarted()
+            showExportReview = false
+            if (!isExporting) {
+                isExporting = true
+                exportProgress = 0
+                exportStatus = "Đang tự động phục hồi nền, kiểm tra chữ còn sót và xuất MP4…"
+                recoveryAdvice = null
+                scope.launch {
+                    runCatching {
+                        exporter.export(
+                            videoUri,
+                            editableOverlays,
+                            translations.map { RenderBox(it.left, it.top, it.width, it.height) },
+                            covers.map { RenderBox(it.left, it.top, it.width, it.height) },
+                            if (salesEditing) coverEnabled else editableOverlays.map { false },
+                            coverColor, coverAlpha, textSize, editedTexts, narrationFile,
+                            blurEnabled = blurEnabled,
+                            blurStrength = blurStrength,
+                            originalAudioVolume = originalAudioVolume,
+                            salesSubtitleTimings = if (salesEditing) narrationTimings else emptyList(),
+                            salesSubtitleRegionIndex = selected,
+                            onProgress = { exportProgress = it.coerceIn(0, 100) }
+                        )
+                    }.onSuccess {
+                        exportStatus = "ĐÃ XUẤT VIDEO • Movies/LONGKAKA SELLER AI"
+                        recoveryAdvice = null
+                    }.onFailure {
+                        recoveryAdvice = VideoRecoveryAdvisor.diagnose(it)
+                        exportStatus = "Lỗi xuất video: " + (it.message ?: "Không xác định")
+                    }
+                    isExporting = false
+                }
+            }
+        }
+    }
 
     Card(shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
