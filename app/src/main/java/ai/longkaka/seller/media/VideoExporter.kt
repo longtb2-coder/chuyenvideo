@@ -218,8 +218,7 @@ class VideoExporter(private val context: Context) {
                 }
                 overlays.forEachIndexed { index, item ->
                     val trackVisible = t >= (item.timeMs - 500L).coerceAtLeast(0L) && t <= item.lastTimeMs + 500L
-                    val captionNeedsStaticRegion = salesSubtitleTimings.isNotEmpty() && index == salesSubtitleRegionIndex && activeSalesCaption != null
-                    if (!trackVisible && !captionNeedsStaticRegion) return@forEachIndexed
+                    if (!trackVisible) return@forEachIndexed
                     if (trackVisible) {
                         val currentBox = regionAt(index)
                         val currentDistance = observationDistance(index)
@@ -235,7 +234,7 @@ class VideoExporter(private val context: Context) {
                         if (superseded) return@forEachIndexed
                     }
                     val c = covers[index]
-                    val observed = if (trackVisible) item.boundsAt(t) else null
+                    val observed = item.boundsAt(t)
                     val defaultLeft = (item.left - 0.025f).coerceAtLeast(0f)
                     val defaultTop = (item.top - 0.025f).coerceAtLeast(0f)
                     val defaultRight = (item.right + 0.025f).coerceAtMost(1f)
@@ -250,11 +249,11 @@ class VideoExporter(private val context: Context) {
                         RenderBox(left, top,
                             ((observed.right - observed.left + 0.05f) * scaleX).coerceAtMost(1f - left),
                             ((observed.bottom - observed.top + 0.05f) * scaleY).coerceAtMost(1f - top))
-                    } else if (item.observations.isEmpty() || captionNeedsStaticRegion) c else return@forEachIndexed
+                    } else if (item.observations.isEmpty()) c else return@forEachIndexed
                     val blurThisOverlay = blurEnabled.getOrElse(index) { false }
                     // Layer 1: blur the original pixels. Keep drawing below so the Vietnamese
                     // subtitle is composited on top of this blurred region in the same frame.
-                    if (blurThisOverlay && (trackVisible || captionNeedsStaticRegion)) {
+                    if (blurThisOverlay && trackVisible) {
                         val patch = blurSamples[index]?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
                         if (patch != null) {
                             // The bitmap is a crop around the sampled OCR glyphs, not the
@@ -308,11 +307,11 @@ class VideoExporter(private val context: Context) {
                     val top = b.top * canvas.height
                     val right = (b.left + b.width) * canvas.width
                     val bottom = (b.top + b.height) * canvas.height
-                    val text = if (!drawSubtitles) {
-                        ""
-                    } else if (salesSubtitleTimings.isNotEmpty()) {
-                        if (index == salesSubtitleRegionIndex) activeSalesCaption?.text.orEmpty() else ""
-                    } else editedTexts[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText
+                    // OCR translation is its own visual layer: it always follows the
+                    // original on-screen text geometry, independent of spoken dialogue.
+                    val text = if (drawSubtitles) {
+                        editedTexts[index]?.takeIf { it.isNotBlank() } ?: item.vietnameseText
+                    } else ""
                     if (text.isBlank()) return@forEachIndexed
                     val availableHeight = (bottom - top).coerceAtLeast(1f)
                     val maxWidth = (right - left).coerceAtLeast(40f) - 12f
@@ -354,6 +353,66 @@ class VideoExporter(private val context: Context) {
                     canvas.save()
                     canvas.clipRect(RectF(left, top, right, bottom))
                     lines.forEachIndexed { line, value ->
+                        val y = firstBaseline + line * lineHeight
+                        canvas.drawText(value, centerX, y, textBg)
+                        canvas.drawText(value, centerX, y, textPaint)
+                    }
+                    canvas.restore()
+                }
+
+                // Spoken-dialogue captions are rendered as a separate, time-synchronised
+                // track. They no longer replace OCR translations or borrow one OCR box.
+                if (drawSubtitles && activeSalesCaption != null && activeSalesCaption.text.isNotBlank()) {
+                    val caption = activeSalesCaption.text.trim()
+                    val candidateBottom = RenderBox(0.04f, 0.79f, 0.92f, 0.17f)
+                    val candidateTop = RenderBox(0.04f, 0.04f, 0.92f, 0.17f)
+                    val occupied = overlays.indices.filter { index ->
+                        val item = overlays[index]
+                        t >= (item.timeMs - 500L).coerceAtLeast(0L) &&
+                            t <= item.lastTimeMs + 500L && item.boundsAt(t) != null
+                    }.map { regionAt(it) }
+                    fun collisionCost(candidate: RenderBox): Float = occupied.sumOf { box ->
+                        val w = (minOf(candidate.left + candidate.width, box.left + box.width) -
+                            maxOf(candidate.left, box.left)).coerceAtLeast(0f)
+                        val h = (minOf(candidate.top + candidate.height, box.top + box.height) -
+                            maxOf(candidate.top, box.top)).coerceAtLeast(0f)
+                        (w * h).toDouble()
+                    }.toFloat()
+                    val captionBox = if (collisionCost(candidateBottom) <= collisionCost(candidateTop)) {
+                        candidateBottom
+                    } else candidateTop
+                    val left = captionBox.left * canvas.width
+                    val top = captionBox.top * canvas.height
+                    val right = (captionBox.left + captionBox.width) * canvas.width
+                    val bottom = (captionBox.top + captionBox.height) * canvas.height
+                    val maxWidth = (right - left).coerceAtLeast(80f) - 20f
+                    var size = (textSizeSp * canvas.width / 360f).coerceIn(20f, 56f)
+                    fun wrapDialogue(): List<String> {
+                        textPaint.textSize = size
+                        val lines = mutableListOf<String>()
+                        var current = StringBuilder()
+                        caption.split(Regex("\\s+")).forEach { word ->
+                            val candidate = if (current.isEmpty()) word else "$current $word"
+                            if (textPaint.measureText(candidate) > maxWidth && current.isNotEmpty()) {
+                                lines += current.toString()
+                                current = StringBuilder(word)
+                            } else current = StringBuilder(candidate)
+                        }
+                        if (current.isNotEmpty()) lines += current.toString()
+                        return lines
+                    }
+                    var dialogueLines = wrapDialogue()
+                    while (dialogueLines.size > 3 && size > 20f) {
+                        size -= 1f
+                        dialogueLines = wrapDialogue()
+                    }
+                    val lineHeight = size * 1.16f
+                    val blockHeight = dialogueLines.size * lineHeight
+                    val centerX = (left + right) / 2f
+                    val firstBaseline = top + ((bottom - top - blockHeight) / 2f).coerceAtLeast(0f) + size
+                    canvas.save()
+                    canvas.clipRect(RectF(left, top, right, bottom))
+                    dialogueLines.forEachIndexed { line, value ->
                         val y = firstBaseline + line * lineHeight
                         canvas.drawText(value, centerX, y, textBg)
                         canvas.drawText(value, centerX, y, textPaint)
