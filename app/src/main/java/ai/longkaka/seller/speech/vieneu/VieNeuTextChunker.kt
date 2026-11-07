@@ -7,7 +7,7 @@ package ai.longkaka.seller.speech.vieneu
 internal data class VieNeuTextChunk(val text: String, val pauseAfterSeconds: Float)
 
 internal object VieNeuTextChunker {
-    const val MAX_CAPTION_CHARS = 56
+    const val MAX_CAPTION_CHARS = 40
 
     fun split(source: String, maxChars: Int = MAX_CAPTION_CHARS): List<VieNeuTextChunk> {
         require(maxChars >= 16) { "Giới hạn cụm đọc quá ngắn." }
