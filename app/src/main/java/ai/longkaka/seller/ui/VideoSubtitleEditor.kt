@@ -102,7 +102,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     var coverEnabled by remember(editableOverlays) { mutableStateOf(savedProject?.coverEnabled ?: editableOverlays.map { it.sourceText.isNotBlank() }) }
     var coverColor by remember { mutableIntStateOf(savedProject?.coverColor ?: 0xFF111111.toInt()) }
     var coverAlpha by remember { mutableFloatStateOf(1f) }
-    // Chinese text detected by OCR is blurred by default; users can disable it per region.
+    // OCR-detected Chinese regions use quality-first background restoration by default; users can disable it per region.
     var blurEnabled by remember(editableOverlays) { mutableStateOf(editableOverlays.map { it.sourceText.isNotBlank() }) }
     var blurStrength by remember { mutableFloatStateOf(14f) }
     var textSize by remember { mutableFloatStateOf(savedProject?.textSize ?: 16f) }
@@ -127,7 +127,7 @@ fun VideoSubtitleEditor(videoUri: Uri, overlays: List<OnScreenText>, editedTexts
     Card(shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Text(if (salesEditing) "BIÊN TẬP VIDEO BÁN HÀNG" else "DỊCH PHIM & CHỈNH SỬA PHỤ ĐỀ", style = MaterialTheme.typography.titleMedium)
-            if (editableOverlays.size == 1 && editableOverlays[0].sourceText.isBlank()) Text("Không nhận diện được chữ tự động. Bạn vẫn có thể tự kéo vùng làm mờ, bật làm mờ và nhập phụ đề tiếng Việt cho toàn video.", style = MaterialTheme.typography.bodySmall)
+            if (editableOverlays.size == 1 && editableOverlays[0].sourceText.isBlank()) Text("Không nhận diện được chữ tự động. Bạn vẫn có thể tự kéo vùng xử lý, bật phục hồi nền hoặc dùng khung che thủ công, rồi nhập phụ đề tiếng Việt cho toàn video.", style = MaterialTheme.typography.bodySmall)
             if (salesEditing) Text(if (narrationFile != null) "Đã nhận giọng đọc VieNeu: ${narrationFile.name} • ${narrationTimings.size} đoạn. Phụ đề xuất video sẽ lấy đúng các câu này và đồng bộ theo thời gian giọng đọc." else "Chưa có giọng đọc bán hàng. Hãy tạo giọng VieNeu trước khi xuất video.", style = MaterialTheme.typography.bodySmall)
             Text(if (salesEditing) "Chỉnh nội dung, vị trí và lớp che trong video bán hàng." else "Chỉ sửa bản dịch tiếng Việt và vị trí phụ đề; không thêm nội dung quảng cáo hay thay đổi video gốc.", style = MaterialTheme.typography.bodySmall)
             BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(16f/9f).background(Color.Black, RoundedCornerShape(10.dp))) {
