@@ -21,8 +21,21 @@ internal object SpeechCaptionPlacement {
         preferredRegion: RenderBox? = null
     ): RenderBox? {
         if (preferredRegion != null && isReadableRegion(preferredRegion)) return preferredRegion
-        return regions.asSequence()
-            .filter(::isReadableRegion)
-            .maxByOrNull { it.width * it.height }
+        val candidates = regions.filter(::isReadableRegion)
+        if (preferredRegion == null) {
+            return candidates.maxByOrNull { it.width * it.height }
+        }
+
+        // If the selected patch is too small, stay near that same text position
+        // instead of jumping to a much larger but unrelated caption region.
+        val preferredX = preferredRegion.left + preferredRegion.width / 2f
+        val preferredY = preferredRegion.top + preferredRegion.height / 2f
+        return candidates.minByOrNull { candidate ->
+            val dx = candidate.left + candidate.width / 2f - preferredX
+            val dy = candidate.top + candidate.height / 2f - preferredY
+            val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+            val sizeBonus = kotlin.math.sqrt(candidate.width * candidate.height).coerceAtMost(0.5f) * 0.04f
+            distance - sizeBonus
+        }
     }
 }

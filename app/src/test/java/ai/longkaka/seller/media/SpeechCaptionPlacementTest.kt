@@ -33,6 +33,20 @@ class SpeechCaptionPlacementTest {
     }
 
     @Test
+    fun prefersNearestReadableRegionWhenSelectedRegionIsTooSmall() {
+        val selectedButTooSmall = RenderBox(0.48f, 0.43f, 0.12f, 0.04f)
+        val nearby = RenderBox(0.43f, 0.40f, 0.30f, 0.10f)
+        val distantLarger = RenderBox(0.08f, 0.76f, 0.82f, 0.18f)
+        assertEquals(
+            nearby,
+            SpeechCaptionPlacement.chooseRestoredRegion(
+                listOf(distantLarger, nearby),
+                selectedButTooSmall
+            )
+        )
+    }
+
+    @Test
     fun returnsNullWhenNoRestoredRegionIsActive() {
         assertNull(SpeechCaptionPlacement.chooseRestoredRegion(emptyList()))
     }
