@@ -7,6 +7,17 @@ import org.junit.Test
 
 class TextRestorationQualityTest {
     @Test
+    fun usesDenseTemporalSamplesAndRejectsDistantRepairPatches() {
+        assertEquals(350L, TextRestorationQuality.TARGET_PATCH_GAP_MS)
+        assertEquals(300L, TextRestorationQuality.MAX_PATCH_DISTANCE_MS)
+        val counts = TextRestorationQuality.allocateSampleCounts(
+            observationCounts = listOf(500),
+            durationsMs = listOf(23_300L)
+        )
+        assertTrue("A 23-second text track should receive dense repair samples", counts.single() >= 60)
+    }
+
+    @Test
     fun allocatesMoreSamplesToLongLivedTextTracks() {
         val counts = TextRestorationQuality.allocateSampleCounts(
             observationCounts = listOf(500, 40, 40),
@@ -28,7 +39,7 @@ class TextRestorationQualityTest {
             maxTotalPatches = 32
         )
 
-        assertEquals(listOf(5, 4, 1), counts)
+        assertEquals(listOf(10, 7, 1), counts)
     }
 
     @Test
