@@ -26,7 +26,12 @@ recovered from a single frame.
 5. When a safe donor exists, its real pixels replace only the glyph mask.
    Otherwise OpenCV Telea inpainting is used, with Navier-Stokes as an exception
    fallback. Pixels outside the glyph mask remain from the current frame.
-6. The export verifier scans the cleaned intermediate before Vietnamese
+6. Repair samples are distributed at a target interval of 350 ms, with a
+   hard 256-patch memory budget across all tracks. During rendering, a sampled
+   repair is applied only within 300 ms of its source observation. If coverage is
+   insufficient, the frame is not filled with a stale patch; the OCR verifier
+   must reject remaining target text before subtitle rendering.
+7. The export verifier scans the cleaned intermediate before Vietnamese
    subtitles are burned in.
 
 This is a conservative temporal-donor strategy, not full optical-flow video
