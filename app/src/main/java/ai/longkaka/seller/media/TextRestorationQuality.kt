@@ -76,6 +76,34 @@ internal object TextRestorationQuality {
     }
 
     /**
+     * Samples between OCR scan timestamps so temporal donors are not accidentally
+     * restricted to the same 250 ms grid on which the source overlay was detected.
+     * Candidates still undergo pixel-level text and scene-similarity checks.
+     */
+    fun temporalDonorCandidateTimes(
+        observedTimes: List<Long>,
+        aroundTimeMs: Long,
+        trackStartMs: Long,
+        trackEndMs: Long,
+        maxCandidates: Int = 12
+    ): List<Long> {
+        require(maxCandidates >= 0) { "Số ứng viên donor không hợp lệ." }
+        if (maxCandidates == 0) return emptyList()
+        val searchStart = maxOf(0L, aroundTimeMs - 1_500L, trackStartMs - 750L)
+        val searchEnd = minOf(aroundTimeMs + 1_500L, trackEndMs + 750L)
+        val candidates = mutableListOf<Long>()
+        var candidateTime = searchStart
+        while (candidateTime <= searchEnd && candidates.size < maxCandidates) {
+            val nearOcrSample = observedTimes.any { kotlin.math.abs(it - candidateTime) <= 80L }
+            if (!nearOcrSample && kotlin.math.abs(candidateTime - aroundTimeMs) >= 180L) {
+                candidates += candidateTime
+            }
+            candidateTime += 125L
+        }
+        return candidates.sortedBy { kotlin.math.abs(it - aroundTimeMs) }
+    }
+
+    /**
      * Matches residual OCR against the original text for that track. A one-character
      * detection inside a longer phrase is too ambiguous to fail export by itself;
      * two-or-more-character fragments and close OCR variants are still detected.
