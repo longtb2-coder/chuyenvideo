@@ -306,7 +306,7 @@ class VideoExporter(private val context: Context) {
                         // verifier will stop export rather than accept residual text or stale pixels.
                         val patch = blurSamples[index]
                             ?.minByOrNull { kotlin.math.abs(it.timeMs - t) }
-                            ?.takeIf { kotlin.math.abs(it.timeMs - t) <= 550L }
+                            ?.takeIf { kotlin.math.abs(it.timeMs - t) <= TextRestorationQuality.MAX_PATCH_DISTANCE_MS }
                         if (patch != null) {
                             // The bitmap is a crop around the sampled OCR glyphs, not the
                             // whole subtitle panel. Reproject that crop by the OCR track's
