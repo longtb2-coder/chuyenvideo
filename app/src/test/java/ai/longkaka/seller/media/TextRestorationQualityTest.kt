@@ -68,6 +68,23 @@ class TextRestorationQualityTest {
     }
 
     @Test
+    fun temporalDonorSearchProbesBetweenThe250MsOcrSamples() {
+        val candidates = TextRestorationQuality.temporalDonorCandidateTimes(
+            observedTimes = listOf(0L, 250L, 500L, 750L, 1_000L),
+            aroundTimeMs = 500L,
+            trackStartMs = 0L,
+            trackEndMs = 1_000L
+        )
+
+        assertTrue(candidates.isNotEmpty())
+        assertTrue(candidates.all { candidate ->
+            listOf(0L, 250L, 500L, 750L, 1_000L).none { kotlin.math.abs(it - candidate) <= 80L }
+        })
+        assertTrue(candidates.all { kotlin.math.abs(it - 500L) >= 180L })
+        assertTrue(candidates.any { it % 250L == 125L })
+    }
+
+    @Test
     fun detectsExactAndPartialRemnantsOfTheOriginalChineseText() {
         assertTrue(TextRestorationQuality.matchesOriginal("奶香松饼", "奶香松饼"))
         assertTrue(TextRestorationQuality.matchesOriginal("奶香松饼", "香松饼"))
