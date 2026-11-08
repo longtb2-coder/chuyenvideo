@@ -175,20 +175,17 @@ internal object VideoTextBlur {
     ): Bitmap? {
         if (glyphs.isEmpty() || track.observations.size < 2) return null
         val observedTimes = track.observations.map { it.timeMs }
-        val candidates = mutableListOf<Long>()
-        // Search only a short neighborhood around this patch. Never walk the entire
-        // duration of a long track when every sampled frame contains the overlay.
-        val searchStart = maxOf(0L, aroundTimeMs - 1_500L, track.timeMs - 750L)
-        val searchEnd = minOf(aroundTimeMs + 1_500L, track.lastTimeMs + 750L)
-        var candidateTime = searchStart
-        while (candidateTime <= searchEnd && candidates.size < 12) {
-            if (observedTimes.none { kotlin.math.abs(it - candidateTime) <= 140L } &&
-                kotlin.math.abs(candidateTime - aroundTimeMs) >= 180L
-            ) candidates += candidateTime
-            candidateTime += 250L
-        }
-        // Try only the closest six candidate frames to keep memory and decode time bounded.
-        for (time in candidates.sortedBy { kotlin.math.abs(it - aroundTimeMs) }.take(6)) {
+        // The OCR scan itself samples every 250 ms. Probe the half-intervals between
+        // those samples so a clean frame is not systematically skipped by the same grid.
+        // Every candidate is still checked for residual glyph contrast and scene similarity.
+        val candidates = TextRestorationQuality.temporalDonorCandidateTimes(
+            observedTimes = observedTimes,
+            aroundTimeMs = aroundTimeMs,
+            trackStartMs = track.timeMs,
+            trackEndMs = track.lastTimeMs
+        )
+        // Try only the closest six candidate frames to keep decode time bounded.
+        for (time in candidates.take(6)) {
             val frame = runCatching {
                 retriever.getFrameAtTime(time * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
             }.getOrNull() ?: continue
