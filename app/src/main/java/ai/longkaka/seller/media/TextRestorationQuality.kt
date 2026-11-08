@@ -7,7 +7,8 @@ package ai.longkaka.seller.media
  */
 internal object TextRestorationQuality {
     const val MAX_TOTAL_PATCHES = 256
-    const val TARGET_PATCH_GAP_MS = 900L
+    const val TARGET_PATCH_GAP_MS = 350L
+    const val MAX_PATCH_DISTANCE_MS = 300L
 
     /**
      * Allocates a bounded number of restoration samples across OCR tracks.
