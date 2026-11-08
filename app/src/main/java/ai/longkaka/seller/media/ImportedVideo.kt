@@ -1,7 +1,7 @@
 package ai.longkaka.seller.media
 
 /**
- * A video owned by the app's intake library.
+ * A video entry that references the original media URI; the app does not own or duplicate device-selected files.
  * contentUri is a MediaStore content:// URI, never a filesystem path.
  */
 data class ImportedVideo(

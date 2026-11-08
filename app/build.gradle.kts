@@ -26,12 +26,18 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.10.00"))
     implementation("androidx.activity:activity-compose:1.11.0")
+    implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.media3:media3-exoplayer:1.9.0")
     implementation("androidx.media3:media3-ui:1.9.0")
     implementation("androidx.media3:media3-transformer:1.9.0")
@@ -50,7 +56,10 @@ dependencies {
     // Bundled on-device Chinese OCR and offline Chinese → Vietnamese translation.
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
     implementation("com.google.mlkit:translate:17.0.3")
+    implementation("com.google.mlkit:genai-speech-recognition:1.0.0-alpha2")
     implementation("org.opencv:opencv:4.10.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
+    // Use a real JSON implementation in local JVM tests; Android stubs throw "not mocked".
+    testImplementation("org.json:json:20240303")
 }

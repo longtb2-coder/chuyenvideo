@@ -24,12 +24,49 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.hypot
 
+data class TextGlyphBox(val left: Float, val top: Float, val right: Float, val bottom: Float)
+
+/**
+ * Normalized content-frame region. OCR outside this region is ignored before tracking
+ * and translation, so status bars, borders, logos and unrelated screen text are not
+ * turned into subtitles. The editor can pass a custom region when the product frame
+ * is not centered.
+ */
+data class TextScanRegion(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+) {
+    init {
+        require(left in 0f..1f && top in 0f..1f && right in 0f..1f && bottom in 0f..1f)
+        require(right > left && bottom > top)
+    }
+
+    fun accepts(boxLeft: Float, boxTop: Float, boxRight: Float, boxBottom: Float): Boolean {
+        val boxWidth = (boxRight - boxLeft).coerceAtLeast(0f)
+        val boxHeight = (boxBottom - boxTop).coerceAtLeast(0f)
+        val area = boxWidth * boxHeight
+        if (area <= 0f) return false
+        val intersectionWidth = (minOf(right, boxRight) - maxOf(left, boxLeft)).coerceAtLeast(0f)
+        val intersectionHeight = (minOf(bottom, boxBottom) - maxOf(top, boxTop)).coerceAtLeast(0f)
+        return intersectionWidth * intersectionHeight / area >= 0.65f
+    }
+
+    companion object {
+        /** Default safe frame: leaves a small margin around the main video content. */
+        val MAIN_CONTENT = TextScanRegion(.04f, .06f, .96f, .94f)
+        val FULL_FRAME = TextScanRegion(0f, 0f, 1f, 1f)
+    }
+}
+
 data class TextRegionObservation(
     val timeMs: Long,
     val left: Float,
     val top: Float,
     val right: Float,
-    val bottom: Float
+    val bottom: Float,
+    val glyphs: List<TextGlyphBox> = emptyList()
 )
 
 data class OnScreenText(
@@ -68,12 +105,13 @@ class ChineseOverlayTranslator(private val context: Context) {
 
     suspend fun scanAndTranslate(
         videoUri: Uri,
-        sampleIntervalMs: Long = 1_000L,
+        sampleIntervalMs: Long = 250L,
         maxFrames: Int = 3_600,
         category: ProductCategory = ProductCategory.AUTO,
+        scanRegion: TextScanRegion = TextScanRegion.MAIN_CONTENT,
         onProgress: (Int) -> Unit = {}
     ): List<OnScreenText> {
-        require(sampleIntervalMs >= 500L) { "Khoảng lấy mẫu phải từ 0,5 giây trở lên." }
+        require(sampleIntervalMs >= 250L) { "Khoảng lấy mẫu tối thiểu là 0,25 giây." }
         require(maxFrames > 0) { "Số khung hình quét phải lớn hơn 0." }
 
         val retriever = MediaMetadataRetriever()
@@ -90,14 +128,19 @@ class ChineseOverlayTranslator(private val context: Context) {
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
             require(duration > 0L) { "Không đọc được thời lượng video." }
-            val frameCount = minOf(
-                ((duration + sampleIntervalMs - 1) / sampleIntervalMs).toInt().coerceAtLeast(1),
-                maxFrames
+            // Keep the requested dense interval for short clips. For long clips,
+            // widen it only as much as needed to stay under maxFrames while still scanning
+            // the entire duration (never stop sampling halfway through a long video).
+            val effectiveIntervalMs = maxOf(
+                sampleIntervalMs,
+                ((duration + maxFrames - 1) / maxFrames).coerceAtLeast(1L)
             )
+            val frameCount = ((duration + effectiveIntervalMs - 1) / effectiveIntervalMs)
+                .toInt().coerceIn(1, maxFrames)
             translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).awaitTask()
 
             for (index in 0 until frameCount) {
-                val timeMs = index * sampleIntervalMs
+                val timeMs = index * effectiveIntervalMs
                 val bitmap = withContext(Dispatchers.IO) {
                     retriever.getFrameAtTime(timeMs * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
                 }
@@ -116,6 +159,26 @@ class ChineseOverlayTranslator(private val context: Context) {
                             val top = (box.top.toFloat() / bitmap.height).coerceIn(0f, 1f)
                             val right = (box.right.toFloat() / bitmap.width).coerceIn(left, 1f)
                             val bottom = (box.bottom.toFloat() / bitmap.height).coerceIn(top, 1f)
+                            // Ignore text outside the main content frame before creating
+                            // tracks, translations or removal masks.
+                            if (!scanRegion.accepts(left, top, right, bottom)) return@forEach
+                            fun toGlyphBox(box: android.graphics.Rect?): TextGlyphBox? {
+                                if (box == null) return null
+                                return TextGlyphBox(
+                                    left = (box.left.toFloat() / bitmap.width).coerceIn(left, right),
+                                    top = (box.top.toFloat() / bitmap.height).coerceIn(top, bottom),
+                                    right = (box.right.toFloat() / bitmap.width).coerceIn(left, right),
+                                    bottom = (box.bottom.toFloat() / bitmap.height).coerceIn(top, bottom)
+                                ).takeIf { it.right > it.left && it.bottom > it.top }
+                            }
+                            // Symbol boxes are character-level. Element boxes are only a
+                            // fallback for recognizer results that do not expose symbols.
+                            val symbolGlyphs = line.elements.flatMap { element ->
+                                element.symbols.mapNotNull { symbol -> toGlyphBox(symbol.boundingBox) }
+                            }
+                            val glyphs = symbolGlyphs.ifEmpty {
+                                line.elements.mapNotNull { element -> toGlyphBox(element.boundingBox) }
+                            }
                             val normalized = text.replace(Regex("\\s+"), "")
                             val cx = (left + right) / 2f
                             val cy = (top + bottom) / 2f
@@ -140,7 +203,7 @@ class ChineseOverlayTranslator(private val context: Context) {
                                     top = top,
                                     right = right,
                                     bottom = bottom,
-                                    observations = mutableListOf(TextRegionObservation(timeMs, left, top, right, bottom))
+                                    observations = mutableListOf(TextRegionObservation(timeMs, left, top, right, bottom, glyphs))
                                 )
                             } else {
                                 candidate.lastTimeMs = timeMs
@@ -148,7 +211,7 @@ class ChineseOverlayTranslator(private val context: Context) {
                                 candidate.top = minOf(candidate.top, top)
                                 candidate.right = maxOf(candidate.right, right)
                                 candidate.bottom = maxOf(candidate.bottom, bottom)
-                                candidate.observations += TextRegionObservation(timeMs, left, top, right, bottom)
+                                candidate.observations += TextRegionObservation(timeMs, left, top, right, bottom, glyphs)
                                 if (text.length > candidate.displayText.length) candidate.displayText = text
                             }
                         }

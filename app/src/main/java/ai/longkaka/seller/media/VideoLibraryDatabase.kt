@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 /**
- * Local index only: source videos remain in shared Movies/LONGKAKA SELLER AI.
+ * Local index only: entries point to the original media URI, wherever the provider stores it.
  * This database never copies, renames or deletes the user's media files.
  */
 class VideoLibraryDatabase(context: Context) :
